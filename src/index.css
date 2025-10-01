@@ -45,6 +45,17 @@ All colors MUST be HSL.
     --shadow-card: 0 4px 24px hsl(0 0% 0% / 0.4);
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --network-ethereum: 200 100% 60%;
+    --network-bitcoin: 30 100% 50%;
+    --network-solana: 280 100% 60%;
+    --network-arbitrum: 210 100% 65%;
+    --network-optimism: 0 100% 55%;
+    --network-zksync: 260 100% 60%;
+    --network-base: 220 100% 65%;
+    
+    --success: 142 76% 36%;
+    --info: 199 89% 48%;
   }
 }
 

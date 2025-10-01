@@ -28,7 +28,9 @@ export const mockMessages = [
   },
 ];
 
-export const detectNetwork = (address: string): "bitcoin" | "ethereum" | "solana" | "unknown" => {
+export type NetworkType = "bitcoin" | "ethereum" | "solana" | "arbitrum" | "optimism" | "zksync" | "base" | "unknown";
+
+export const detectNetwork = (address: string): NetworkType => {
   // Bitcoin: starts with 1, 3, or bc1
   if (address.match(/^(1|3|bc1)/)) {
     return "bitcoin";

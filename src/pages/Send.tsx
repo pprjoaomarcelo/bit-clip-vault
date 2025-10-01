@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
-import { Navbar } from "@/components/Navbar";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
-import { Send as SendIcon, AlertCircle, Info, DollarSign } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { detectNetwork } from "@/lib/mockData";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { AlertCircle, Lock, Send as SendIcon, DollarSign, Database, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "@/hooks/use-toast";
+import { detectNetwork, type NetworkType } from "@/lib/mockData";
 import { NetworkBadge } from "@/components/NetworkBadge";
+import { Navbar } from "@/components/Navbar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,129 +22,249 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { uploadToDecentralizedStorage, compressMessage, type StorageProvider } from "@/lib/storage";
+import { encryptMessage } from "@/lib/encryption";
+import { NETWORKS, estimateGasFee, L2_NETWORKS, checkNetworkHealth, type NetworkType as NetType } from "@/lib/networks";
+import { chooseSolanaMethod, sendViaMemo, sendViaDedicatedAccount } from "@/lib/solana";
 
 export default function Send() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
-  const [network, setNetwork] = useState<ReturnType<typeof detectNetwork>>("unknown");
   
   const [recipient, setRecipient] = useState("");
   const [message, setMessage] = useState("");
-  const [encrypted, setEncrypted] = useState(false);
-  const [recipientNetwork, setRecipientNetwork] = useState<ReturnType<typeof detectNetwork> | null>(null);
+  const [isEncrypted, setIsEncrypted] = useState(true);
+  const [detectedNetwork, setDetectedNetwork] = useState<NetworkType>("unknown");
+  const [selectedNetwork, setSelectedNetwork] = useState<NetType | "unknown" | "">("");
+  const [estimatedFee, setEstimatedFee] = useState<number>(0);
   const [showPreview, setShowPreview] = useState(false);
-  const [estimatedFee, setEstimatedFee] = useState<string>("0");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [storageProvider, setStorageProvider] = useState<StorageProvider>("ipfs");
+  const [storagePointer, setStoragePointer] = useState<string>("");
 
   useEffect(() => {
-    const walletData = sessionStorage.getItem('wallet');
+    const walletData = sessionStorage.getItem("wallet");
     if (walletData) {
-      const parsed = JSON.parse(walletData);
-      setConnected(parsed.connected);
-      setAddress(parsed.address);
-      setNetwork(parsed.network);
+      const data = JSON.parse(walletData);
+      setConnected(data.connected || false);
+      setAddress(data.address || "");
     }
   }, []);
-
-  const handleRecipientChange = (value: string) => {
-    setRecipient(value);
-    if (value.length > 10) {
-      const network = detectNetwork(value);
-      setRecipientNetwork(network);
-      // Simulate fee estimation based on network
-      if (network === "ethereum") {
-        setEstimatedFee("0.0024");
-      } else if (network === "bitcoin") {
-        setEstimatedFee("0.00015");
-      } else if (network === "solana") {
-        setEstimatedFee("0.000005");
-      }
-    } else {
-      setRecipientNetwork(null);
-      setEstimatedFee("0");
-    }
-  };
 
   const handleConnect = () => {
     navigate("/connect");
   };
 
   const handleDisconnect = () => {
-    sessionStorage.removeItem('wallet');
+    sessionStorage.removeItem("wallet");
     setConnected(false);
+    setAddress("");
     navigate("/");
+    toast({
+      title: "Desconectado",
+      description: "Sua carteira foi desconectada.",
+    });
   };
 
-  const handlePrepareTransaction = () => {
-    if (!recipient || !message) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos obrigatórios",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!recipientNetwork || recipientNetwork === "unknown") {
-      toast({
-        title: "Endereço inválido",
-        description: "Por favor, insira um endereço blockchain válido",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Simulate balance check (mock)
-    const mockBalance = Math.random();
-    if (mockBalance < 0.3) {
-      toast({
-        title: "Saldo insuficiente",
-        description: `Você não tem saldo suficiente para pagar a taxa de rede estimada (${estimatedFee} ${recipientNetwork.toUpperCase()})`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Show preview
-    setShowPreview(true);
-  };
-
-  const handleConfirmSend = () => {
-    // Generate mock transaction payload
-    const payload = {
-      to: recipient,
-      data: encrypted ? "[ENCRYPTED]" : message,
-      network: recipientNetwork,
-      fee: estimatedFee,
-      timestamp: new Date().toISOString(),
-    };
-
-    console.log("Transaction payload:", payload);
-    setShowPreview(false);
-
-    // Simulate transaction sending
-    const success = Math.random() > 0.2;
+  const handleRecipientChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setRecipient(value);
     
-    if (success) {
+    if (value.trim()) {
+      const network = detectNetwork(value);
+      setDetectedNetwork(network);
+      
+      // For Ethereum addresses, default to Arbitrum (cheapest L2)
+      if (network === "ethereum") {
+        setSelectedNetwork("arbitrum");
+      } else if (network !== "unknown") {
+        setSelectedNetwork(network as NetType);
+      }
+      
+      // Estimate fee based on selected network and message size
+      if (message.trim() && network !== "unknown") {
+        const fee = await estimateGasFee(
+          network === "ethereum" ? "arbitrum" : network as NetType,
+          message.length
+        );
+        setEstimatedFee(fee);
+      }
+    } else {
+      setDetectedNetwork("unknown");
+      setSelectedNetwork("");
+      setEstimatedFee(0);
+    }
+  };
+
+  const handlePrepareTransaction = async () => {
+    if (!recipient.trim()) {
       toast({
-        title: "Transação enviada",
-        description: "Sua mensagem foi enviada para a blockchain. Aguarde confirmação.",
+        title: "❌ Erro de validação",
+        description: "Por favor, insira um endereço de destino.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!message.trim()) {
+      toast({
+        title: "❌ Erro de validação",
+        description: "Por favor, insira uma mensagem.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!detectedNetwork || detectedNetwork === "unknown" || !selectedNetwork) {
+      toast({
+        title: "❌ Rede não detectada",
+        description: "Não foi possível detectar a rede do endereço fornecido.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Check network health
+      const networkHealthy = await checkNetworkHealth(selectedNetwork as NetType);
+      if (!networkHealthy) {
+        toast({
+          title: "⚠️ Problema na rede",
+          description: `A rede ${NETWORKS[selectedNetwork].name} está temporariamente indisponível. Tente novamente mais tarde.`,
+          variant: "destructive"
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Estimate gas fee
+      const fee = await estimateGasFee(selectedNetwork as NetType, message.length);
+      setEstimatedFee(fee);
+
+      // Simulate balance check
+      const hasBalance = Math.random() > 0.2; // 80% success rate for demo
+      if (!hasBalance) {
+        toast({
+          title: "💰 Saldo insuficiente",
+          description: `Você precisa de aproximadamente ${fee.toFixed(6)} ${selectedNetwork === 'solana' ? 'SOL' : 'ETH'} para cobrir a taxa de rede.`,
+          variant: "destructive"
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Process message for storage
+      let messageToStore = message;
+      
+      // For Solana, compress if needed
+      if (selectedNetwork === 'solana') {
+        messageToStore = compressMessage(message);
+        console.log(`[Send] Message compressed for Solana`);
+      }
+
+      // Encrypt if needed
+      if (isEncrypted) {
+        const { encryptedMessage } = await encryptMessage(messageToStore, recipient);
+        messageToStore = encryptedMessage;
+        console.log(`[Send] Message encrypted`);
+      }
+
+      // Upload to decentralized storage
+      const storageResult = await uploadToDecentralizedStorage(messageToStore, storageProvider);
+      setStoragePointer(storageResult.cid || storageResult.txId || "");
+      
+      console.log(`[Send] Content uploaded to ${storageProvider}:`, storageResult);
+
+      setShowPreview(true);
+    } catch (error) {
+      console.error('[Send] Transaction preparation failed:', error);
+      toast({
+        title: "❌ Erro na preparação",
+        description: error instanceof Error ? error.message : "Falha ao preparar transação. Verifique sua conexão e tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    setIsProcessing(true);
+    
+    try {
+      let txSignature: string;
+
+      // Handle Solana-specific sending
+      if (selectedNetwork === 'solana') {
+        const solanaMethod = chooseSolanaMethod(message.length);
+        
+        if (solanaMethod === 'memo') {
+          txSignature = await sendViaMemo(storagePointer, recipient, connected);
+          console.log(`[Send] Sent via Solana Memo:`, txSignature);
+        } else {
+          txSignature = await sendViaDedicatedAccount(storagePointer, recipient, connected);
+          console.log(`[Send] Sent via Solana Dedicated Account:`, txSignature);
+        }
+      } else {
+        // Simulate Ethereum/L2 transaction
+        txSignature = `0x${Math.random().toString(16).substring(2, 15)}${Math.random().toString(16).substring(2, 15)}`;
+        console.log(`[Send] Sent on ${NETWORKS[selectedNetwork as NetType].name}:`, txSignature);
+      }
+
+      // Simulate potential errors
+      const errorTypes = ['nonce', 'rpc', null];
+      const randomError = Math.random() > 0.85 ? errorTypes[Math.floor(Math.random() * errorTypes.length)] : null;
+
+      if (randomError === 'nonce') {
+        throw new Error('Erro de nonce: A transação foi rejeitada devido a um nonce incorreto. Aguarde e tente novamente.');
+      } else if (randomError === 'rpc') {
+        throw new Error('Erro de RPC: Não foi possível conectar ao nó da blockchain. Verifique sua conexão.');
+      }
+
+      toast({
+        title: "✅ Mensagem enviada!",
+        description: (
+          <div className="space-y-1">
+            <p>Sua mensagem foi enviada com sucesso via {NETWORKS[selectedNetwork as NetType].name}.</p>
+            <p className="text-xs font-mono truncate">TX: {txSignature}</p>
+            <p className="text-xs text-muted-foreground">
+              {isEncrypted ? '🔒 Mensagem criptografada' : '🌐 Mensagem pública'} • 
+              📦 Storage: {storageProvider.toUpperCase()}
+            </p>
+          </div>
+        ),
       });
       
       // Reset form
-      setTimeout(() => {
-        setRecipient("");
-        setMessage("");
-        setEncrypted(false);
-        setRecipientNetwork(null);
-      }, 1500);
-    } else {
+      setRecipient("");
+      setMessage("");
+      setIsEncrypted(true);
+      setDetectedNetwork("unknown");
+      setSelectedNetwork("");
+      setEstimatedFee(0);
+      setShowPreview(false);
+      setStoragePointer("");
+    } catch (error) {
+      console.error('[Send] Transaction failed:', error);
+      
       toast({
-        title: "Erro ao enviar transação",
-        description: "A transação foi rejeitada. Verifique sua carteira e tente novamente.",
-        variant: "destructive",
+        title: "❌ Erro ao enviar transação",
+        description: error instanceof Error ? error.message : "Falha desconhecida. Por favor, tente novamente.",
+        variant: "destructive"
       });
+      setShowPreview(false);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -156,178 +277,282 @@ export default function Send() {
         onDisconnect={handleDisconnect}
       />
 
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-            <SendIcon className="w-8 h-8 text-primary" />
-            Send Message
-          </h1>
-          <p className="text-muted-foreground">
-            Compose and send an on-chain message
-          </p>
-        </div>
+      <div className="container max-w-2xl mx-auto px-4 py-8">
+        <Card className="bg-card/50 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <SendIcon className="h-5 w-5" />
+              Enviar Mensagem
+            </CardTitle>
+            <CardDescription>
+              Envie mensagens criptografadas via blockchain com storage descentralizado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {!connected && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Conecte sua carteira para enviar mensagens on-chain.
+                  <Button onClick={handleConnect} size="sm" className="ml-4">
+                    Conectar Carteira
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
 
-        {!connected && (
-          <Card className="p-6 mb-6 bg-primary/10 border-primary/20">
-            <div className="flex gap-3">
-              <AlertCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium mb-1">Wallet not connected</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  You need to connect your wallet to send messages on-chain
-                </p>
-                <Button onClick={handleConnect} size="sm" className="gap-2 bg-primary hover:bg-primary/90 text-black">
-                  Connect Wallet
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        <Card className="p-6 bg-card/50 backdrop-blur-sm">
-          <div className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="recipient">Recipient Address *</Label>
+              <Label htmlFor="recipient">Endereço de destino</Label>
               <Input
                 id="recipient"
-                placeholder="Enter Bitcoin, Ethereum, or Solana address"
+                placeholder="0x... / bc1... / Sol..."
                 value={recipient}
-                onChange={(e) => handleRecipientChange(e.target.value)}
-                className="font-mono"
+                onChange={handleRecipientChange}
               />
-              {recipientNetwork && recipientNetwork !== "unknown" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Detected:</span>
-                  <NetworkBadge network={recipientNetwork} />
+              {detectedNetwork && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <NetworkBadge network={detectedNetwork} />
+                  </div>
+                  
+                  {/* Network selector for EVM addresses */}
+                  {detectedNetwork === "ethereum" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="network">Selecione a rede (L2 recomendado)</Label>
+                      <Select
+                        value={selectedNetwork}
+                        onValueChange={async (value: NetType) => {
+                          setSelectedNetwork(value);
+                          if (message.trim()) {
+                            const fee = await estimateGasFee(value, message.length);
+                            setEstimatedFee(fee);
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="network">
+                          <SelectValue placeholder="Escolha uma rede" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ethereum">
+                            <div className="flex items-center justify-between w-full">
+                              <span>Ethereum (Mainnet)</span>
+                              <span className="text-xs text-muted-foreground ml-2">~0.0024 ETH</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="arbitrum">
+                            <div className="flex items-center justify-between w-full">
+                              <span>⚡ Arbitrum One (L2)</span>
+                              <span className="text-xs text-success ml-2">~0.0001 ETH</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="optimism">
+                            <div className="flex items-center justify-between w-full">
+                              <span>⚡ Optimism (L2)</span>
+                              <span className="text-xs text-success ml-2">~0.00008 ETH</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="base">
+                            <div className="flex items-center justify-between w-full">
+                              <span>⚡ Base (L2)</span>
+                              <span className="text-xs text-success ml-2">~0.00006 ETH</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="zksync">
+                            <div className="flex items-center justify-between w-full">
+                              <span>⚡ zkSync Era (L2)</span>
+                              <span className="text-xs text-success ml-2">~0.00005 ETH</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {selectedNetwork && L2_NETWORKS.includes(selectedNetwork as NetType) && (
+                        <p className="text-xs text-success">
+                          ✨ L2 selecionado - taxas até 95% mais baixas!
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="message">Message *</Label>
+              <Label htmlFor="message">Mensagem</Label>
               <Textarea
                 id="message"
-                placeholder="Type your message here..."
+                placeholder="Digite sua mensagem aqui..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="min-h-32 resize-none"
-                maxLength={1000}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>This message will be stored permanently on-chain</span>
-                <span>{message.length}/1000</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/50 border border-border">
-              <div className="space-y-1">
-                <Label htmlFor="encrypted" className="cursor-pointer">Encrypt Message</Label>
-                <p className="text-xs text-muted-foreground">
-                  Only the recipient can decrypt and read
-                </p>
-              </div>
-              <Switch
-                id="encrypted"
-                checked={encrypted}
-                onCheckedChange={setEncrypted}
+                rows={5}
               />
             </div>
 
-            <Card className="p-4 bg-blue-500/5 border-blue-500/20">
-              <div className="flex gap-3">
-                <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">How it works</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Clicking "Send" will generate transaction instructions. 
-                    You'll need to complete the transaction in your wallet to broadcast the message on-chain. 
-                    Network fees apply based on the recipient's blockchain.
-                  </p>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="encryption"
+                  checked={isEncrypted}
+                  onCheckedChange={setIsEncrypted}
+                />
+                <Label htmlFor="encryption" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  Criptografar mensagem (cliente)
+                </Label>
               </div>
-            </Card>
+              <p className="text-sm text-muted-foreground">
+                {isEncrypted 
+                  ? "🔒 Mensagem será criptografada localmente antes de ser enviada. Apenas o destinatário poderá ler." 
+                  : "🌐 Mensagem pública - qualquer pessoa poderá ler o conteúdo."}
+              </p>
+            </div>
 
-            {recipientNetwork && estimatedFee !== "0" && (
-              <Card className="p-4 bg-primary/5 border-primary/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium">Taxa estimada</span>
+            {/* Storage provider selection */}
+            <div className="space-y-2">
+              <Label htmlFor="storage">Armazenamento descentralizado</Label>
+              <Select
+                value={storageProvider}
+                onValueChange={(value: StorageProvider) => setStorageProvider(value)}
+              >
+                <SelectTrigger id="storage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ipfs">
+                    <div className="flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      <span>IPFS (InterPlanetary File System)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="arweave">
+                    <div className="flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      <span>Arweave (Permanente)</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Apenas o pointer será armazenado on-chain, reduzindo custos
+              </p>
+            </div>
+
+            {estimatedFee > 0 && selectedNetwork && (
+              <Card className="bg-card/50 border-success/20">
+                <CardContent className="pt-6 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-success" />
+                      <span className="text-sm font-medium">Taxa estimada</span>
+                    </div>
+                    <span className="text-sm font-mono font-semibold">
+                      {estimatedFee.toFixed(6)} {selectedNetwork === 'solana' ? 'SOL' : selectedNetwork === 'bitcoin' ? 'BTC' : 'ETH'}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-primary">
-                      {estimatedFee} {recipientNetwork.toUpperCase()}
+                  <div className="text-xs text-muted-foreground">
+                    Rede: {NETWORKS[selectedNetwork as NetType].name} • 
+                    Confirmação: {NETWORKS[selectedNetwork as NetType].confirmationTime}
+                  </div>
+                  {selectedNetwork === 'solana' && (
+                    <p className="text-xs text-info">
+                      ℹ️ Método: {chooseSolanaMethod(message.length) === 'memo' ? 'Memo Program' : 'Dedicated Account'}
                     </p>
-                    <p className="text-xs text-muted-foreground">Taxa de rede</p>
-                  </div>
-                </div>
+                  )}
+                </CardContent>
               </Card>
             )}
 
             <Button 
+              className="w-full" 
+              size="lg"
               onClick={handlePrepareTransaction}
-              disabled={!connected || !recipient || !message}
-              className="w-full h-12 gap-2 bg-primary hover:bg-primary/90 text-black font-semibold"
+              disabled={!connected || isProcessing || !selectedNetwork}
             >
-              <SendIcon className="w-5 h-5" />
-              Revisar e Enviar
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Preparando...
+                </>
+              ) : (
+                <>
+                  <SendIcon className="mr-2 h-4 w-4" />
+                  Revisar e Enviar
+                </>
+              )}
             </Button>
-          </div>
+          </CardContent>
         </Card>
-
-        <AlertDialog open={showPreview} onOpenChange={setShowPreview}>
-          <AlertDialogContent className="bg-card border-border">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <SendIcon className="w-5 h-5 text-primary" />
-                Confirmar Transação
-              </AlertDialogTitle>
-              <AlertDialogDescription asChild>
-                <div className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Para:</span>
-                      <span className="font-mono text-xs">{recipient.slice(0, 10)}...{recipient.slice(-8)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Rede:</span>
-                      <NetworkBadge network={recipientNetwork || "unknown"} />
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Mensagem:</span>
-                      <span className="font-medium">
-                        {encrypted ? "🔒 Criptografada" : "📝 Pública"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm border-t border-border pt-2 mt-2">
-                      <span className="text-muted-foreground">Taxa de rede:</span>
-                      <span className="font-bold text-primary">
-                        {estimatedFee} {recipientNetwork?.toUpperCase()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <Card className="p-3 bg-secondary/50">
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Esta transação será permanente e não pode ser revertida. 
-                      Certifique-se de que todos os detalhes estão corretos antes de confirmar.
-                    </p>
-                  </Card>
-                </div>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleConfirmSend}
-                className="bg-primary hover:bg-primary/90 text-black"
-              >
-                Confirmar Envio
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
+
+      <AlertDialog open={showPreview} onOpenChange={setShowPreview}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Envio</AlertDialogTitle>
+            <AlertDialogDescription>
+              Revise os detalhes da sua transação antes de confirmar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Para:</div>
+              <div className="text-sm text-muted-foreground font-mono break-all">{recipient}</div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Rede:</div>
+              {selectedNetwork && <NetworkBadge network={selectedNetwork} />}
+              <div className="text-xs text-muted-foreground">
+                {selectedNetwork && NETWORKS[selectedNetwork as NetType].name}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Mensagem:</div>
+              <div className="text-sm text-muted-foreground max-h-32 overflow-y-auto p-2 bg-muted/50 rounded">
+                {isEncrypted ? "🔒 Mensagem criptografada (não visível)" : message}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Armazenamento:</div>
+              <div className="text-sm text-muted-foreground">
+                📦 {storageProvider.toUpperCase()} • Pointer será salvo on-chain
+              </div>
+              {storagePointer && (
+                <div className="text-xs font-mono text-muted-foreground break-all bg-muted/30 p-2 rounded">
+                  {storagePointer}
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Taxa de rede:</div>
+                <div className="text-sm font-mono font-semibold">
+                  {estimatedFee.toFixed(6)} {selectedNetwork === 'solana' ? 'SOL' : selectedNetwork === 'bitcoin' ? 'BTC' : 'ETH'}
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Confirmação em ~{selectedNetwork && NETWORKS[selectedNetwork as NetType].confirmationTime}
+              </div>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSend} disabled={isProcessing}>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                "Confirmar Envio"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
