@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { uploadToDecentralizedStorage, compressMessage, type StorageProvider } from "@/lib/storage";
-import { encryptMessage } from "@/lib/encryption";
+import { encryptMessage, requestWalletSignature } from "@/lib/encryption";
 import { NETWORKS, estimateGasFee, L2_NETWORKS, checkNetworkHealth, type NetworkType as NetType } from "@/lib/networks";
 import { chooseSolanaMethod, sendViaMemo, sendViaDedicatedAccount } from "@/lib/solana";
 import { supabase } from "@/integrations/supabase/client";
@@ -170,9 +170,15 @@ export default function Send() {
 
       // Encrypt if needed
       if (isEncrypted) {
-        const { encryptedMessage } = await encryptMessage(messageToStore, recipient);
-        messageToStore = encryptedMessage;
-        console.log(`[Send] Message encrypted`);
+        console.log(`[Send] Requesting wallet signature for encryption...`);
+        try {
+          const walletSignature = await requestWalletSignature(address);
+          const { encryptedMessage } = await encryptMessage(messageToStore, walletSignature);
+          messageToStore = encryptedMessage;
+          console.log(`[Send] Message encrypted successfully`);
+        } catch (error: any) {
+          throw new Error(error.message || 'Falha ao obter assinatura da carteira');
+        }
       }
 
       // Upload to decentralized storage

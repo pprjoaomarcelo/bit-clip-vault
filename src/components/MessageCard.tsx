@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NetworkBadge } from "./NetworkBadge";
-import { ExternalLink, Lock, Unlock, Send, Inbox, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ExternalLink, Lock, Unlock, Send, Inbox, AlertCircle, CheckCircle2, Eye } from "lucide-react";
 
 interface Message {
   id: string;
@@ -20,9 +21,13 @@ interface Message {
 interface MessageCardProps {
   message: Message;
   userAddress: string;
+  onDecrypt?: (messageId: string) => Promise<string | null>;
 }
 
-export const MessageCard = ({ message, userAddress }: MessageCardProps) => {
+export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProps) => {
+  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+
   const formatAddress = (addr: string) => `${addr.slice(0, 8)}...${addr.slice(-6)}`;
   
   const formatDate = (dateString: string) => {
@@ -36,6 +41,24 @@ export const MessageCard = ({ message, userAddress }: MessageCardProps) => {
 
   const isSent = message.user_address.toLowerCase() === userAddress.toLowerCase();
   const otherAddress = isSent ? message.recipient_address : message.user_address;
+
+  const handleDecrypt = async () => {
+    if (!onDecrypt) return;
+    
+    setIsDecrypting(true);
+    try {
+      const decrypted = await onDecrypt(message.id);
+      if (decrypted) {
+        setDecryptedContent(decrypted);
+      }
+    } finally {
+      setIsDecrypting(false);
+    }
+  };
+
+  const displayContent = message.encrypted 
+    ? (decryptedContent || '🔒 Mensagem criptografada - clique para ver')
+    : message.content;
 
   const getExplorerUrl = () => {
     if (!message.tx_hash) return '#';
@@ -116,7 +139,21 @@ export const MessageCard = ({ message, userAddress }: MessageCardProps) => {
         </div>
         
         <div className="bg-background/50 rounded-lg p-3 border border-border/50">
-          <p className="text-sm text-foreground leading-relaxed break-words">{message.content}</p>
+          <p className="text-sm text-foreground leading-relaxed break-words">
+            {displayContent}
+          </p>
+          {message.encrypted && !decryptedContent && onDecrypt && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 gap-2"
+              onClick={handleDecrypt}
+              disabled={isDecrypting}
+            >
+              <Eye className="w-3 h-3" />
+              {isDecrypting ? 'Descriptografando...' : 'Ver mensagem'}
+            </Button>
+          )}
         </div>
 
         {message.tx_hash && (

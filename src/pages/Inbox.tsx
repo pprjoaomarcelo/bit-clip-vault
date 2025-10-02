@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { requestWalletSignature, decryptMessage } from "@/lib/encryption";
 
 interface DBMessage {
   id: string;
@@ -42,6 +43,7 @@ export default function Inbox() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedNetwork, setSelectedNetwork] = useState<string>("all");
+  const [walletSignature, setWalletSignature] = useState<string | null>(null);
 
   useEffect(() => {
     const walletData = sessionStorage.getItem('wallet');
@@ -72,6 +74,13 @@ export default function Inbox() {
       if (error) throw error;
 
       setMessages(data || []);
+      
+      // Check if there are encrypted messages and we need signature
+      const hasEncryptedMessages = data?.some(msg => msg.encrypted) || false;
+      if (hasEncryptedMessages && !walletSignature) {
+        // We'll request signature when user tries to view encrypted message
+        console.log("[Inbox] Encrypted messages found, signature will be requested when viewing");
+      }
     } catch (error: any) {
       console.error("[Inbox] Error fetching messages:", error);
       toast({
@@ -81,6 +90,39 @@ export default function Inbox() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDecryptMessage = async (messageId: string): Promise<string | null> => {
+    try {
+      // Request signature if we don't have it yet
+      if (!walletSignature) {
+        console.log("[Inbox] Requesting wallet signature for decryption...");
+        const signature = await requestWalletSignature(address);
+        setWalletSignature(signature);
+        
+        // Find message and decrypt
+        const message = messages.find(m => m.id === messageId);
+        if (!message) return null;
+        
+        const decrypted = await decryptMessage(message.content, signature);
+        return decrypted;
+      } else {
+        // Use existing signature
+        const message = messages.find(m => m.id === messageId);
+        if (!message) return null;
+        
+        const decrypted = await decryptMessage(message.content, walletSignature);
+        return decrypted;
+      }
+    } catch (error: any) {
+      console.error("[Inbox] Decryption failed:", error);
+      toast({
+        title: "Falha na descriptografia",
+        description: error.message || "Não foi possível descriptografar a mensagem",
+        variant: "destructive",
+      });
+      return null;
     }
   };
 
@@ -226,6 +268,7 @@ export default function Inbox() {
                       key={message.id} 
                       message={message}
                       userAddress={address}
+                      onDecrypt={handleDecryptMessage}
                     />
                   ))}
                 </TabsContent>
@@ -241,6 +284,7 @@ export default function Inbox() {
                         key={message.id} 
                         message={message}
                         userAddress={address}
+                        onDecrypt={handleDecryptMessage}
                       />
                     ))
                   )}
@@ -257,6 +301,7 @@ export default function Inbox() {
                         key={message.id} 
                         message={message}
                         userAddress={address}
+                        onDecrypt={handleDecryptMessage}
                       />
                     ))
                   )}
