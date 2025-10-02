@@ -33,6 +33,7 @@ import { uploadToDecentralizedStorage, compressMessage, type StorageProvider } f
 import { encryptMessage } from "@/lib/encryption";
 import { NETWORKS, estimateGasFee, L2_NETWORKS, checkNetworkHealth, type NetworkType as NetType } from "@/lib/networks";
 import { chooseSolanaMethod, sendViaMemo, sendViaDedicatedAccount } from "@/lib/solana";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Send() {
   const navigate = useNavigate();
@@ -151,17 +152,12 @@ export default function Send() {
       const fee = await estimateGasFee(selectedNetwork as NetType, message.length);
       setEstimatedFee(fee);
 
-      // Simulate balance check
-      const hasBalance = Math.random() > 0.2; // 80% success rate for demo
-      if (!hasBalance) {
-        toast({
-          title: "💰 Saldo insuficiente",
-          description: `Você precisa de aproximadamente ${fee.toFixed(6)} ${selectedNetwork === 'solana' ? 'SOL' : 'ETH'} para cobrir a taxa de rede.`,
-          variant: "destructive"
-        });
-        setIsProcessing(false);
-        return;
-      }
+      // CRITICAL: Show clear warning about balance requirement
+      toast({
+        title: "⚠️ Importante: Verifique seu saldo",
+        description: `Certifique-se de ter pelo menos ${fee.toFixed(6)} ${selectedNetwork === 'solana' ? 'SOL' : 'ETH'} em sua carteira. A transação falhará se o saldo for insuficiente.`,
+        variant: "default",
+      });
 
       // Process message for storage
       let messageToStore = message;
@@ -203,6 +199,7 @@ export default function Send() {
     
     try {
       let txSignature: string;
+      let status: 'success' | 'failed' = 'success';
 
       // Handle Solana-specific sending
       if (selectedNetwork === 'solana') {
@@ -216,19 +213,48 @@ export default function Send() {
           console.log(`[Send] Sent via Solana Dedicated Account:`, txSignature);
         }
       } else {
-        // Simulate Ethereum/L2 transaction
+        // Simulate Ethereum/L2 transaction with realistic error scenarios
+        console.log(`[${selectedNetwork}] Simulando transação...`);
+        
+        // Simulate potential errors - THIS IS WHERE REAL BALANCE CHECK WOULD HAPPEN
+        const randomError = Math.random();
+        if (randomError < 0.1) {
+          status = 'failed';
+          throw new Error("Saldo insuficiente para gas - adicione fundos à sua carteira");
+        } else if (randomError < 0.15) {
+          status = 'failed';
+          throw new Error("Nonce muito baixo - transação já processada");
+        } else if (randomError < 0.2) {
+          status = 'failed';
+          throw new Error("Timeout do nó RPC - tente novamente");
+        }
+
+        // Simulate successful transaction
+        await new Promise(resolve => setTimeout(resolve, 2000));
         txSignature = `0x${Math.random().toString(16).substring(2, 15)}${Math.random().toString(16).substring(2, 15)}`;
         console.log(`[Send] Sent on ${NETWORKS[selectedNetwork as NetType].name}:`, txSignature);
       }
 
-      // Simulate potential errors
-      const errorTypes = ['nonce', 'rpc', null];
-      const randomError = Math.random() > 0.85 ? errorTypes[Math.floor(Math.random() * errorTypes.length)] : null;
+      // Save message to database
+      const { error: dbError } = await supabase.from('messages').insert({
+        user_address: address,
+        recipient_address: recipient,
+        content: message, // Save original message, not encrypted content
+        encrypted: isEncrypted,
+        network: selectedNetwork,
+        network_type: detectedNetwork,
+        tx_hash: txSignature,
+        storage_provider: storageProvider,
+        storage_cid: storagePointer,
+        storage_url: `${storageProvider}://${storagePointer}`,
+        gas_fee: estimatedFee,
+        status: status,
+        direction: 'sent',
+      });
 
-      if (randomError === 'nonce') {
-        throw new Error('Erro de nonce: A transação foi rejeitada devido a um nonce incorreto. Aguarde e tente novamente.');
-      } else if (randomError === 'rpc') {
-        throw new Error('Erro de RPC: Não foi possível conectar ao nó da blockchain. Verifique sua conexão.');
+      if (dbError) {
+        console.error("[DB] Failed to save message:", dbError);
+        // Don't fail the transaction if DB save fails, but log it
       }
 
       toast({
@@ -241,6 +267,7 @@ export default function Send() {
               {isEncrypted ? '🔒 Mensagem criptografada' : '🌐 Mensagem pública'} • 
               📦 Storage: {storageProvider.toUpperCase()}
             </p>
+            <p className="text-xs text-success mt-1">✓ Confira sua mensagem no Inbox</p>
           </div>
         ),
       });
@@ -257,9 +284,28 @@ export default function Send() {
     } catch (error) {
       console.error('[Send] Transaction failed:', error);
       
+      // Save failed transaction to database
+      if (address) {
+        await supabase.from('messages').insert({
+          user_address: address,
+          recipient_address: recipient,
+          content: message,
+          encrypted: isEncrypted,
+          network: selectedNetwork || '',
+          network_type: detectedNetwork,
+          tx_hash: null,
+          storage_provider: storageProvider,
+          storage_cid: storagePointer,
+          storage_url: `${storageProvider}://${storagePointer}`,
+          gas_fee: estimatedFee,
+          status: 'failed',
+          direction: 'sent',
+        });
+      }
+      
       toast({
-        title: "❌ Erro ao enviar transação",
-        description: error instanceof Error ? error.message : "Falha desconhecida. Por favor, tente novamente.",
+        title: "❌ Transação falhou",
+        description: error instanceof Error ? error.message : "Falha ao enviar mensagem on-chain. Verifique o saldo da sua carteira.",
         variant: "destructive"
       });
       setShowPreview(false);

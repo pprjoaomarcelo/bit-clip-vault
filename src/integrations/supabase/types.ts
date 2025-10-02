@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          direction: string
+          encrypted: boolean
+          gas_fee: number | null
+          id: string
+          network: string
+          network_type: string
+          recipient_address: string
+          status: string
+          storage_cid: string
+          storage_provider: string
+          storage_url: string
+          tx_hash: string | null
+          updated_at: string
+          user_address: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          direction?: string
+          encrypted?: boolean
+          gas_fee?: number | null
+          id?: string
+          network: string
+          network_type: string
+          recipient_address: string
+          status?: string
+          storage_cid: string
+          storage_provider: string
+          storage_url: string
+          tx_hash?: string | null
+          updated_at?: string
+          user_address: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          direction?: string
+          encrypted?: boolean
+          gas_fee?: number | null
+          id?: string
+          network?: string
+          network_type?: string
+          recipient_address?: string
+          status?: string
+          storage_cid?: string
+          storage_provider?: string
+          storage_url?: string
+          tx_hash?: string | null
+          updated_at?: string
+          user_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
