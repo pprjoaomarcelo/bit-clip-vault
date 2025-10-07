@@ -1,73 +1,33 @@
-# Welcome to your Lovable project
+# SovereignComm
 
-## Project info
+SovereignComm is a visionary project to build a truly sovereign and resilient communication system. It combines the physical reach of LoRa mesh networks with the permanence and security of decentralized technologies like IPFS, Filecoin, and the Bitcoin blockchain.
 
-**URL**: https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b
+## Core Architecture
 
-## How can I edit this code?
+The system is designed to anchor data from a potentially offline LoRa mesh network into a global, immutable database (the Bitcoin blockchain). The high-level workflow is as follows:
 
-There are several ways of editing your application.
+1.  A user sends a message over the LoRa mesh network.
+2.  A gateway node, which has both LoRa and internet connectivity, picks up the message.
+3.  The gateway uploads the message content to the InterPlanetary File System (IPFS), receiving a Content Identifier (CID).
+4.  The gateway then commits this CID to the Bitcoin blockchain using an `OP_RETURN` transaction. This acts as an immutable pointer to the message data without bloating the blockchain itself.
+5.  For long-term persistence, the data associated with the CID is pinned on Filecoin.
 
-**Use Lovable**
+## Key Challenges
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b) and start prompting.
+- **Mesh Scalability:** LoRa networks have low bandwidth and are subject to duty-cycle regulations.
+- **Gateway Incentives:** Gateway operators need incentives to provide the crucial bridge between the LoRa network and the internet.
+- **Key Management:** User identity is tied to their cryptographic keys, making key security and backup paramount.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Proposed Solutions & Economic Model
 
-**Use your preferred IDE**
+- **On-chain Cost Optimization:** Instead of one Bitcoin transaction per message, gateways will batch multiple message CIDs into a Merkle Tree and record a single Merkle Root on-chain, reducing costs drastically.
+- **Incentive Model:** Micropayments via the Lightning Network will be used to compensate gateway operators for their service, creating a sustainable and market-driven network.
+- **Phased Rollout:** The project may start by using a lower-cost blockchain (like a Bitcoin sidechain or a Layer 2) to validate the model before moving to the Bitcoin mainnet for maximum security.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Target Applications
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- **Primary:** Providing communication for populations without internet access.
+- **Secondary:**
+    - Disaster relief communications.
+    - Censorship-resistant communication for journalists and activists.
+    - Secure and low-cost Machine-to-Machine (M2M) and IoT communication.
