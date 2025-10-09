@@ -42,8 +42,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 type SendMode = "complete" | "ipfs_only" | "on_chain";
 
+import { useWallet } from '@solana/wallet-adapter-react';
+
 export default function Send() {
   const navigate = useNavigate();
+  const solanaWallet = useWallet();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
   
@@ -179,13 +182,72 @@ export default function Send() {
   };
 
   const handleConfirmSend = async () => {
-    // A lógica de envio real seria movida para cá, usando o `storagePointer` (payload)
-    // e o `sendMode` para decidir qual função de transação chamar (sendBitcoinTransaction, etc.)
-    toast({ title: "🚀 Transação Enviada (Simulação)", description: `Payload: ${storagePointer}` });
-    setShowPreview(false);
-    // Resetar o formulário
-    setMessage("");
-    setRecipient("");
+    setIsProcessing(true);
+    try {
+      let txSignature = "";
+      const isEVM = selectedNetwork === 'ethereum' || L2_NETWORKS.some(n => n.id === selectedNetwork);
+
+      // Determina o endereço de remetente correto com base em qual carteira está conectada
+      const senderAddress = solanaWallet.connected ? solanaWallet.publicKey?.toBase58() : address;
+      if (!senderAddress) {
+        throw new Error("Nenhuma carteira conectada para determinar o remetente.");
+      }
+
+      if (isEVM) {
+        console.log(`[Send] Enviando CID para a rede EVM: ${selectedNetwork}`);
+        txSignature = await sendEvmTransaction(storagePointer, recipient);
+      } else if (selectedNetwork === 'solana') {
+        // A carteira Solana é obtida do hook useWallet()
+        if (!solanaWallet.connected || !solanaWallet.publicKey) {
+          throw new Error("Por favor, conecte sua carteira Solana primeiro.");
+        }
+        console.log(`[Send] Enviando CID para a rede Solana...`);
+        // Passamos o objeto de carteira completo, que corresponde à interface que definimos
+        txSignature = await sendSolanaTransaction(storagePointer, solanaWallet as any);
+      } else if (selectedNetwork === 'bitcoin') {
+        // Lógica de envio para Bitcoin (OP_RETURN) a ser implementada
+        console.log("[Send] Simulação de envio para Bitcoin...");
+        txSignature = `btc_sim_${Math.random().toString(36).substring(2)}`;
+      } else {
+        throw new Error("Rede selecionada não é suportada para envio.");
+      }
+
+      // Salva um registro da mensagem enviada no nosso banco de dados
+      const { error: insertError } = await supabase.from('messages').insert({
+        sender: senderAddress,
+        recipient: recipient,
+        content: message,
+        cid: storagePointer,
+        tx_hash: txSignature,
+        network: selectedNetwork,
+      });
+
+      if (insertError) {
+        console.error("[Supabase] Erro ao salvar a mensagem enviada:", insertError);
+        toast({ title: "⚠️ Aviso", description: "A transação foi enviada, mas falhou ao salvar no seu histórico." });
+      }
+
+      toast({
+        title: "🚀 Transação Enviada com Sucesso!",
+        description: `Hash da Transação: ${txSignature}`,
+      });
+
+      // Resetar o formulário
+      setShowPreview(false);
+      setMessage("");
+      setRecipient("");
+      setStoragePointer("");
+
+    } catch (error) {
+      console.error('[Send] Falha ao confirmar o envio:', error);
+      toast({
+        title: "❌ Erro no Envio",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

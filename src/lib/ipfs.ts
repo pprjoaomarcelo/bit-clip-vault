@@ -42,7 +42,7 @@ const encryptData = async (data: Uint8Array, recipientPublicKey: string): Promis
   encrypted.set(prefix);
   encrypted.set(data, prefix.length);
   
-  console.log('[IPFS] Dados criptografados (simulação). Tamanho final: ${encrypted.length} bytes`);
+  console.log(`[IPFS] Dados criptografados (simulação). Tamanho final: ${encrypted.length} bytes`);
   return encrypted;
 };
 
@@ -68,7 +68,7 @@ export const uploadToIpfs = async (rawData: string | Uint8Array, recipientPublic
   // Passo 3: Fazer o upload para o IPFS
   // A implementação real usaria um cliente IPFS (como 'kubo-rpc-client') para se conectar a um nó IPFS
   // ou faria um POST para um gateway IPFS público com permissão de escrita (ex: Infura, Pinata).
-  console.log('[IPFS] Fazendo upload dos dados criptografados para a rede IPFS (simulação)...`);
+  console.log(`[IPFS] Fazendo upload dos dados criptografados para a rede IPFS (simulação)...`);
 
   // Mock do upload e do CID retornado.
   // O CID é um hash do conteúdo final (os dados criptografados e comprimidos).

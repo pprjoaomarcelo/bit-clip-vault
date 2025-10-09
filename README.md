@@ -31,3 +31,33 @@ The system is designed to anchor data from a potentially offline LoRa mesh netwo
     - Disaster relief communications.
     - Censorship-resistant communication for journalists and activists.
     - Secure and low-cost Machine-to-Machine (M2M) and IoT communication.
+
+## Core Data Architecture: IPLD
+
+To solve the challenge of retrieving individual messages while only storing a single root identifier on-chain, SovereignComm will use a structured data approach with IPFS's Inter-Planetary Linked Data (IPLD).
+
+This architecture was chosen for its flexibility, privacy, and scalability over deterministic or Merkle-proof-based retrieval systems.
+
+The structure is as follows:
+
+1.  **On-Chain Anchor (Bitcoin):** A single `root_cid` is stored on the blockchain for each user, pointing to their master "Mailbox" object. This is the user's single point of truth.
+
+2.  **IPFS Level 1 (Mailbox Object):** The `root_cid` resolves to an IPLD object (a key-value map) that contains links to the user's inbox and sent items.
+    ```json
+    {
+      "inbox":  { "/": "QmInboxCid..." },
+      "sent":   { "/": "QmSentCid..." }
+    }
+    ```
+
+3.  **IPFS Level 2 (Message Index Objects):** The `inbox` and `sent` CIDs point to other IPLD map objects. These objects act as indexes, mapping unique, non-sequential message IDs (e.g., UUIDs) to the CIDs of the actual message content. Using non-sequential IDs prevents metadata leakage about the number of messages a user has.
+    ```json
+    {
+      "msg-uuid-001": { "/": "QmMsg1Cid..." },
+      "msg-uuid-002": { "/": "QmMsg2Cid..." }
+    }
+    ```
+
+4.  **IPFS Level 3 (Message Content):** The final CIDs point to the raw, encrypted message data.
+
+This layered approach allows clients to efficiently traverse the data graph to find specific messages without downloading the entire dataset, while the blockchain provides the ultimate immutable reference to the user's data root.
