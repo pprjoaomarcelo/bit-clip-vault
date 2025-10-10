@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
-import { Settings as SettingsIcon, Bell, Lock, Eye } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Eye, Gem } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { NetworkBadge } from "@/components/NetworkBadge";
 import type { detectNetwork } from "@/lib/mockData";
@@ -64,7 +64,7 @@ export default function Settings() {
             Settings
           </h1>
           <p className="text-muted-foreground">
-            Manage your preferences and privacy
+            Manage your account, preferences, and privacy
           </p>
         </div>
 
@@ -90,6 +90,30 @@ export default function Settings() {
             </div>
           </Card>
         )}
+
+        <Card className="p-6 mb-6 bg-card/50 backdrop-blur-sm">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Gem className="w-4 h-4 text-primary" />
+            Assinatura & Uso
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Plano Atual</p>
+                <p className="font-semibold">Plano Básico</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/upgrade')}>Upgrade</Button>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary">
+              <p className="text-sm text-muted-foreground mb-1">Tamanho Máximo de Anexo</p>
+              <p className="font-mono text-sm">3 MB</p>
+            </div>
+            <div className="p-3 rounded-lg bg-secondary">
+                <p className="text-sm text-muted-foreground mb-1">Rede Principal</p>
+                <p className="font-mono text-sm">Bitcoin</p>
+            </div>
+          </div>
+        </Card>
 
         <Card className="p-6 bg-card/50 backdrop-blur-sm">
           <h3 className="font-semibold mb-6 flex items-center gap-2">

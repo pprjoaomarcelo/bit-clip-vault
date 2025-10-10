@@ -8,6 +8,7 @@ import Connect from "./pages/Connect";
 import Inbox from "./pages/Inbox";
 import Send from "./pages/Send";
 import Settings from "./pages/Settings";
+import Upgrade from "./pages/Upgrade";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/inbox" element={<Inbox />} />
           <Route path="/send" element={<Send />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/upgrade" element={<Upgrade />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

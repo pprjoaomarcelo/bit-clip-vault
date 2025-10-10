@@ -5,8 +5,7 @@ import * as dotenv from 'dotenv';
 // Carrega as variáveis de ambiente do arquivo .env
 dotenv.config();
 
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/your-infura-id";
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
+const privateKey = process.env.PRIVATE_KEY;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {
@@ -16,9 +15,14 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
     sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: [PRIVATE_KEY],
+      url: process.env.ETH_SEPOLIA_RPC_URL || "",
+      accounts: privateKey ? [privateKey] : [],
       chainId: 11155111,
+    },
+    baseSepolia: {
+      url: process.env.BASE_SEPOLIA_RPC_URL || "",
+      accounts: privateKey ? [privateKey] : [],
+      chainId: 84532,
     },
   },
   paths: {

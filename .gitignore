@@ -28,3 +28,6 @@ dist-ssr
 /artifacts
 /cache
 /typechain-types
+
+# Environment variables
+.env
