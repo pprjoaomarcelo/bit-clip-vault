@@ -138,3 +138,13 @@ To ensure the long-term resilience and antifragility of the SovereignComm networ
 - **Configuration:** The gateway operator should be able to select the desired anchoring mechanism via a configuration setting.
 
 This modular design not only makes the system robust against changes in underlying protocols but also opens the door for offering users a choice of different security/cost trade-offs for their data in the future.
+
+---
+
+## 7. Technical Debt & Future Refactors
+
+### 7.1. IPFS Client Library Migration (Helia)
+
+*   **Context:** During development, `npm` warned that the `ipfs-http-client` library is deprecated in favor of a newer library called **Helia**.
+*   **Task:** For long-term stability and to stay current with the IPFS development ecosystem, we should plan a future migration from `ipfs-http-client` to `Helia`.
+*   **Action:** Before moving to a production-ready version of the gateway, research the migration path from `ipfs-http-client` to `Helia` and schedule the refactor. Helia is the future of IPFS in JavaScript, according to the official IPFS team.
