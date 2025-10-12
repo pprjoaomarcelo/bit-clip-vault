@@ -61,3 +61,38 @@ The structure is as follows:
 4.  **IPFS Level 3 (Message Content):** The final CIDs point to the raw, encrypted message data.
 
 This layered approach allows clients to efficiently traverse the data graph to find specific messages without downloading the entire dataset, while the blockchain provides the ultimate immutable reference to the user's data root.
+
+---
+
+## Maintenance
+
+### Clearing Disk Space in Google Cloud Shell
+
+The Google Cloud Shell environment has a limited home disk size (around 5 GB). During development, `npm` caches and `node_modules` directories can consume this space rapidly, leading to a "disk usage at 99%" error which can block all file operations.
+
+If this occurs, follow these steps to clean up the environment:
+
+1.  **Analyze Disk Usage:** First, identify the largest directories.
+    ```bash
+    du -sh /home/mrx_hck3r/* .[^.]* | sort -rh | head -n 10
+    ```
+
+2.  **Clear the NPM Cache:** The `.npm` cache is often the biggest culprit and is safe to clear.
+    ```bash
+    npm cache clean --force
+    ```
+
+3.  **Remove all `node_modules` Directories:** These can be regenerated.
+    ```bash
+    # Remove from project
+    rm -rf /home/mrx_hck3r/sovereign-comm/node_modules
+
+    # Remove from any other locations found in step 1
+    rm -rf /home/mrx_hck3r/node_modules
+    ```
+
+4.  **Reinstall Project Dependencies:** After cleaning, navigate to the project directory and reinstall the necessary packages.
+    ```bash
+    cd /home/mrx_hck3r/sovereign-comm
+    npm install
+    ```

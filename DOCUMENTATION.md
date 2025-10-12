@@ -116,3 +116,44 @@ Clone the repository, install dependencies with `npm install`, and configure you
 ## 6. Project Roadmap
 
 The project evolves in phases, from the MVP to the mainnet with LoRa hardware. Refer to `ROADMAP.md` for details on the next steps.
+
+---
+
+## 7. Technical Deep Dive
+
+### 7.1. Frontend Architecture
+
+The frontend is a React application built with Vite. Key components and pages include:
+
+*   **`Settings.tsx`**: This page serves as the main user control panel. As of the latest updates, it includes:
+    *   **Wallet Connection Status**: Displays the user's connected wallet address and network.
+    *   **Subscription & Usage (`Assinatura & Uso`)**: A section that displays the user's current plan (e.g., "Plano Básico" / "Basic Plan") and usage quotas (e.g., max attachment size). It features an "Upgrade" button to navigate to the plan selection page.
+    *   **Privacy & Display Toggles**: Switches for features like "Public Mode" and "Auto-refresh Inbox".
+
+*   **`Upgrade.tsx`**: A placeholder page linked from the Settings page, intended for users to select and upgrade their subscription plans in the future.
+
+### 7.2. Database Schema (Supabase)
+
+To support user accounts, subscriptions, and usage tracking, the following database schema is proposed for implementation in Supabase.
+
+*   **`plans` Table**: Stores the available subscription plans.
+    ```sql
+    CREATE TABLE plans (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL, -- e.g., 'Basic', 'Sovereign'
+      price_monthly INT NOT NULL, -- Price in cents or smallest currency unit
+      storage_quota_gb INT NOT NULL,
+      max_attachment_size_mb INT NOT NULL,
+      active BOOLEAN DEFAULT true
+    );
+    ```
+
+*   **`user_profiles` Table**: Extends the default `auth.users` table with application-specific data.
+    ```sql
+    CREATE TABLE user_profiles (
+      id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+      plan_id UUID REFERENCES plans(id) ON DELETE SET NULL,
+      storage_used_bytes BIGINT DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+    ```
