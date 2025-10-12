@@ -14,6 +14,10 @@ app.get('/', (req: Request, res: Response) => {
   res.send('SovereignComm Gateway is running!');
 });
 
+// In-memory store for message CIDs to be batched
+const cidBatch: string[] = [];
+const BATCH_SIZE = 5;
+
 app.post('/messages', async (req: Request, res: Response) => {
   console.log('Received new message object:', req.body);
   
@@ -24,12 +28,25 @@ app.post('/messages', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Sender, recipient, and timestamp are required fields.' });
   }
 
-  // We can add more complex validation here in the future (e.g., for attachment CIDs)
-
   try {
     // The entire message object, conforming to our schema, is added to IPFS.
     const { cid } = await ipfs.add(JSON.stringify(req.body));
     console.log('Added message object to IPFS with CID:', cid.toString());
+
+    // Add the new CID to our batch
+    cidBatch.push(cid.toString());
+    console.log(`CID batch contains ${cidBatch.length} items.`);
+
+    // If batch is full, process it (simulate Merkle Tree generation)
+    if (cidBatch.length >= BATCH_SIZE) {
+      console.log(`BATCH FULL: Processing ${cidBatch.length} CIDs.`);
+      console.log('Simulating Merkle Tree generation with CIDs:', cidBatch);
+      // In a real scenario, we would generate the Merkle Root and anchor it here.
+      
+      // Clear the batch for the next set of messages
+      cidBatch.length = 0;
+      console.log('Batch cleared.');
+    }
 
     res.status(201).json({ 
       status: 'Message object processed by gateway', 
