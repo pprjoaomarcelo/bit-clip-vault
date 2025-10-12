@@ -102,6 +102,7 @@ Clone the repository, install dependencies with `npm install`, and configure you
 ### 5.2. Project Structure
 
 *   `/src`: Contains the React frontend source code.
+*   `/gateway`: Contains the Node.js backend source code for the gateway service.
 *   `/contracts`: Contains the smart contracts (e.g., Mailbox, Staking).
 *   `/scripts`: Deployment and blockchain interaction scripts.
 *   `/docs`: Documentation and architecture files.
@@ -157,3 +158,53 @@ To support user accounts, subscriptions, and usage tracking, the following datab
       updated_at TIMESTAMPTZ DEFAULT now()
     );
     ```
+
+### 7.3. Gateway Service Architecture
+
+The gateway is a Node.js service responsible for processing user messages and interfacing with decentralized protocols like IPFS and Bitcoin.
+
+*   **Tech Stack:**
+    *   **Runtime:** Node.js
+    *   **Framework:** Express.js
+    *   **Language:** TypeScript
+    *   **IPFS Communication:** `ipfs-http-client`
+    *   **Merkle Tree Generation:** `merkletreejs` + `crypto-js`
+
+*   **API Endpoints:**
+    *   **`POST /messages`**: The primary endpoint for submitting new messages.
+        *   **Request Body Schema:** The endpoint expects a JSON object conforming to the IPLD Message Schema v1.0.
+            ```json
+            {
+              "schemaVersion": "1.0",
+              "timestamp": "2025-10-12T10:00:00Z",
+              "sender": "SENDER_PUBLIC_KEY_OR_ID",
+              "recipient": "RECIPIENT_PUBLIC_KEY_OR_ID",
+              "content": "Message body text.",
+              "attachments": [
+                {
+                  "name": "file.pdf",
+                  "cid": "CID_OF_THE_ATTACHMENT_ON_IPFS",
+                  "size": 1048576
+                }
+              ]
+            }
+            ```
+        *   **Success Response (201):**
+            ```json
+            {
+              "status": "Message object processed by gateway",
+              "timestamp": "2025-10-12T12:34:56Z",
+              "message_cid": "CID_OF_THE_MESSAGE_OBJECT"
+            }
+            ```
+        *   **Error Response (400):** Returned if required fields (`sender`, `recipient`, `timestamp`) are missing.
+
+*   **Core Logic Flow:**
+    1.  The service receives a JSON object at the `/messages` endpoint.
+    2.  It validates that the required schema fields are present.
+    3.  The entire JSON object is added to IPFS, generating a unique `message_cid`.
+    4.  This `message_cid` is added to an in-memory array (`cidBatch`).
+    5.  When the batch size reaches a defined limit (e.g., 5), the service generates a Merkle Tree from the CIDs in the batch.
+    6.  It calculates the Merkle Root of the tree and logs it to the console.
+    7.  The batch is cleared to begin collecting the next set of CIDs.
+    8.  **(Next Step):** The calculated Merkle Root will be anchored onto the Bitcoin blockchain.

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { create } from 'ipfs-http-client';
 import { MerkleTree } from 'merkletreejs';
 import SHA256 from 'crypto-js/sha256';
+import * as bitcoin from 'bitcoinjs-lib';
 
 // Create an IPFS client
 const ipfs = create({ url: 'https://ipfs.infura.io:5001/api/v0' });
@@ -53,7 +54,8 @@ app.post('/messages', async (req: Request, res: Response) => {
       console.log('Merkle Tree:', tree.toString());
       console.log('Merkle Root:', merkleRoot);
 
-      // TODO: Anchor the merkleRoot onto the Bitcoin blockchain.
+      // Anchor the merkleRoot onto the Bitcoin blockchain.
+      anchorMerkleRoot(merkleRoot);
       
       // Clear the batch for the next set of messages
       cidBatch.length = 0;
@@ -70,6 +72,20 @@ app.post('/messages', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to process message object with IPFS.' });
   }
 });
+
+function anchorMerkleRoot(merkleRoot: string) {
+  console.log(`--- ANCHORING LOGIC ---`);
+  console.log(`Merkle Root to be anchored: ${merkleRoot}`);
+
+  // TODO: Implement the actual Bitcoin transaction creation and broadcast logic here.
+  // 1. Create a new transaction.
+  // 2. Add an OP_RETURN output with the merkleRoot.
+  // 3. Add inputs and a change output.
+  // 4. Sign the transaction.
+  // 5. Broadcast the transaction to the Bitcoin network.
+
+  console.log(`--- END ANCHORING LOGIC ---`);
+}
 
 app.listen(port, () => {
   console.log(`Gateway server listening on port ${port}`);
