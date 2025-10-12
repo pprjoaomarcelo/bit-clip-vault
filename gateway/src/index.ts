@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { create } from 'ipfs-http-client';
 import { MerkleTree } from 'merkletreejs';
-import SHA256 from 'crypto-js/sha256';
+import SHA256 from 'crypto-js/sha256.js';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { ECPairFactory } from 'ecpair';
