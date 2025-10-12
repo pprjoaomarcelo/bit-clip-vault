@@ -97,7 +97,7 @@ The gateway software is designed to be blockchain-agnostic. It can choose the mo
 
 ### 5.1. Environment Setup
 
-Clone the repository, install dependencies with `npm install`, and configure your environment variables in the `.env` file (API keys, etc.).
+Clone the repository, install dependencies with `npm install`, and configure your environment variables in the `.env` file (API keys, etc.). Note that some sub-projects like `/gateway` have their own dependencies and may require a separate `npm install` within their directory.
 
 ### 5.2. Project Structure
 
@@ -111,6 +111,16 @@ Clone the repository, install dependencies with `npm install`, and configure you
 
 *   To run the development environment: `npm run dev`
 *   To run tests: `npm run test`
+
+### 5.4. Troubleshooting
+
+*   **`ERR_PACKAGE_PATH_NOT_EXPORTED` in Gateway:** If you see this error when running the gateway (`npx ts-node gateway/src/index.ts`), it's likely due to a module resolution conflict with newer versions of libraries like `ipfs-http-client`. The fix is to ensure the `gateway/tsconfig.json` is configured for modern module resolution. The following settings should be present in `compilerOptions`:
+    ```json
+    {
+      "module": "NodeNext",
+      "moduleResolution": "NodeNext"
+    }
+    ```
 
 ---
 
