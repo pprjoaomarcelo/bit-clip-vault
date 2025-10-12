@@ -53,3 +53,37 @@ This document outlines the development phases for building the core infrastructu
 *   **3.2. Economic Incentives Test:** Onboard test users and gateway operators to simulate the economic model and ensure incentives are correctly aligned.
 *   **3.3. Security Audits:** Commission third-party security audits, focusing on the staking/slashing contracts and the cryptographic integrity of the message retrieval protocol.
 *   **3.4. Community & Documentation:** Create comprehensive guides for end-users and aspiring gateway operators based on the testnet experience.
+
+---
+
+## Phase 4: LoRa Integration for Offline Access
+
+**Objective:** To bridge the online and offline worlds by enabling gateways to receive messages directly from users via a LoRa-based radio network, ensuring functionality even without internet access.
+
+*   **4.1. Develop Gateway LoRa Module:**
+    *   **Task:** Design and build the software module within the gateway service that interfaces with LoRa radio hardware to listen for and decode incoming messages.
+
+*   **4.2. Define LoRa Data Protocol:**
+    *   **Task:** Specify the exact data packet structure for SovereignComm messages transmitted over LoRa, optimizing for low bandwidth and ensuring compatibility with the gateway's decoding module.
+
+*   **4.3. Hardware & Firmware Integration:**
+    *   **Task:** Develop and document reference firmware for common, low-cost LoRa hardware (e.g., ESP32, Heltec LoRa boards) that enables users to broadcast messages.
+
+*   **4.4. Field Testing & Network Simulation:**
+    *   **Task:** Conduct real-world tests of the full offline-to-online message flow, from a LoRa-enabled client to a gateway and onto IPFS/Bitcoin.
+
+---
+
+## Phase 5: Antifragility & Extensibility
+
+**Objective:** To enhance the long-term resilience of the network and enable future extensibility by abstracting core components into modular, pluggable interfaces.
+
+*   **5.1. Implement Pluggable Anchoring Module:**
+    *   **Task:** Refactor the gateway's anchoring logic into an abstract "AnchorService" interface, as detailed in `FUTURE_IDEAS.md`. This decouples the gateway's core logic from the specific anchoring method.
+
+*   **5.2. Develop Alternative Anchor Implementation (Stacks):**
+    *   **Task:** Create the first alternative implementation for the `OP_RETURN` method by building a `StacksContractAnchor`. This module will anchor data by interacting with a smart contract on the Stacks L2.
+    *   **Purpose:** This serves as a strategic backup to `OP_RETURN` and acts as a proof-of-concept for the modular design.
+
+*   **5.3. Enable Operator Configuration:**
+    *   **Task:** Add the functionality for gateway operators to choose and configure their preferred anchoring mechanism via the gateway's configuration files. This empowers operators and decentralizes technical dependencies.

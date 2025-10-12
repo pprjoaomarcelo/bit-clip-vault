@@ -119,3 +119,22 @@ This section details a refined model for a decentralized content marketplace tha
     *   **Gateway Preferences:** Gateways act as independent economic agents, broadcasting a list of currencies they are currently willing to accept (e.g., `SATS, WBTC, ETH`). They can change these preferences based on their own treasury needs (e.g., needing ETH to pay for gas fees).
     *   **Discovery & Handshake:** The user's client, knowing what assets the user holds, queries the network for a gateway that accepts one of those assets. A match is made, and the transaction proceeds.
     *   **Gas Abstraction:** This model allows gateways to offer "gas abstraction" services. A user can pay a gateway in SATS to have a message anchored on Solana; the gateway receives the SATS and uses its own SOL balance to pay the network fee, charging a small premium for the service.
+
+---
+
+## 6. Pluggable Anchoring Mechanism for Antifragility
+
+To ensure the long-term resilience and antifragility of the SovereignComm network, the gateway's anchoring mechanism should be designed as a pluggable module. This mitigates the risk of relying solely on a single feature like Bitcoin's `OP_RETURN`, which could be deprecated or changed in the future.
+
+### Design:
+
+- **Abstract Interface:** Define a clear "AnchorService" interface within the gateway's codebase.
+- **Multiple Implementations:**
+  - **Initial MVP:** `BitcoinOpReturnAnchor` - The default implementation, anchoring data hashes directly onto the Bitcoin L1 blockchain using `OP_RETURN`.
+  - **Future Alternatives:**
+    - `StacksContractAnchor`: Anchors data by interacting with a smart contract on the Stacks L2, inheriting Bitcoin's security.
+    - `LiquidAnchor`: Utilizes the Liquid sidechain for anchoring.
+    - `EvmAnchor`: Could be developed to anchor on Ethereum L2s (e.g., Polygon, Arbitrum) if desired.
+- **Configuration:** The gateway operator should be able to select the desired anchoring mechanism via a configuration setting.
+
+This modular design not only makes the system robust against changes in underlying protocols but also opens the door for offering users a choice of different security/cost trade-offs for their data in the future.
