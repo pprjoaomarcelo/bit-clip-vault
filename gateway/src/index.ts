@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import { create } from 'ipfs-http-client';
 import { MerkleTree } from 'merkletreejs';
 import SHA256 from 'crypto-js/sha256.js';
