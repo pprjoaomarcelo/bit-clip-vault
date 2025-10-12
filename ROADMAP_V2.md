@@ -42,6 +42,7 @@ This document outlines the development phases for building the core infrastructu
 *   **2.2. Implement Marketplace:** Develop the gateway discovery UI in the client, including the logic to fetch, display, and select gateways based on the specified metadata.
 *   **2.3. Implement Reliability Protocol:** Code the failure detection, error reporting, and refund/retry logic within the client.
 *   **2.4. Implement Full Message Flow:** Add the Merkle Proof generation logic to the gateway software and the validation logic to the client software. Implement the full IPLD-based mailbox update and retrieval flow.
+    *   **[x] Gateway: Implemented Merkle Root generation and Bitcoin anchoring (Testnet) via OP_RETURN.**
 
 ---
 
