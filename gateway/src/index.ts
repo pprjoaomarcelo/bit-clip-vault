@@ -1,5 +1,7 @@
 import express, { Request, Response } from 'express';
 import { create } from 'ipfs-http-client';
+import { MerkleTree } from 'merkletreejs';
+import SHA256 from 'crypto-js/sha256';
 
 // Create an IPFS client
 const ipfs = create({ url: 'https://ipfs.infura.io:5001/api/v0' });
@@ -37,11 +39,21 @@ app.post('/messages', async (req: Request, res: Response) => {
     cidBatch.push(cid.toString());
     console.log(`CID batch contains ${cidBatch.length} items.`);
 
-    // If batch is full, process it (simulate Merkle Tree generation)
+    // If batch is full, process it to generate a Merkle Root
     if (cidBatch.length >= BATCH_SIZE) {
-      console.log(`BATCH FULL: Processing ${cidBatch.length} CIDs.`);
-      console.log('Simulating Merkle Tree generation with CIDs:', cidBatch);
-      // In a real scenario, we would generate the Merkle Root and anchor it here.
+      console.log(`BATCH FULL: Processing ${cidBatch.length} CIDs to generate Merkle Root.`);
+      
+      // Create the leaves of the Merkle Tree
+      const leaves = cidBatch.map(cid => SHA256(cid));
+      // Create the Merkle Tree
+      const tree = new MerkleTree(leaves, SHA256);
+      // Get the Merkle Root
+      const merkleRoot = tree.getRoot().toString('hex');
+
+      console.log('Merkle Tree:', tree.toString());
+      console.log('Merkle Root:', merkleRoot);
+
+      // TODO: Anchor the merkleRoot onto the Bitcoin blockchain.
       
       // Clear the batch for the next set of messages
       cidBatch.length = 0;
