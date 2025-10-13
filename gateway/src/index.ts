@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
-import { create } from 'ipfs-http-client';
+import 'dotenv/config'; // Load .env variables
+import PinataClient from '@pinata/sdk';
 import { MerkleTree } from 'merkletreejs';
 import SHA256 from 'crypto-js/sha256.js';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -11,8 +12,12 @@ import axios from 'axios';
 // Needed for ECPair in bitcoinjs-lib v6+
 const ECPair = ECPairFactory(ecc);
 
-// Create an IPFS client
-const ipfs = create({ url: 'https://ipfs.infura.io:5001/api/v0' });
+// --- Pinata Client Initialization ---
+if (!process.env.PINATA_JWT) {
+  throw new Error('PINATA_JWT environment variable is not set. Please add it to your .env file in the gateway directory.');
+}
+const pinata = new PinataClient({ pinataJWTKey: process.env.PINATA_JWT });
+// --- End Pinata Client Initialization ---
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,7 +26,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
-  res.send('SovereignComm Gateway is running!');
+  res.send('SovereignComm Gateway is running with Pinata integration!');
 });
 
 // In-memory store for message CIDs to be batched
@@ -31,7 +36,7 @@ const BATCH_SIZE = 5;
 app.post('/messages', async (req: Request, res: Response) => {
   console.log('Received new message object:', req.body);
   
-  const { sender, recipient, timestamp, content, attachments } = req.body;
+  const { sender, recipient, timestamp } = req.body;
 
   // Basic validation for the new schema
   if (!sender || !recipient || !timestamp) {
@@ -39,19 +44,33 @@ app.post('/messages', async (req: Request, res: Response) => {
   }
 
   try {
-    // The entire message object, conforming to our schema, is added to IPFS.
-    const { cid } = await ipfs.add(JSON.stringify(req.body));
-    console.log('Added message object to IPFS with CID:', cid.toString());
+    // --- Pin to Pinata ---
+    const options = {
+      pinataMetadata: {
+        name: `SovereignComm Message - ${new Date(timestamp).toISOString()}`,
+        keyvalues: {
+          sender: sender,
+          recipient: recipient
+        }
+      },
+      pinataOptions: {
+        cidVersion: 1 as (0 | 1)
+      }
+    };
+    const result = await pinata.pinJSONToIPFS(req.body, options);
+    const cid = result.IpfsHash;
+    console.log('Pinned message object to Pinata with CID:', cid);
+    // --- End Pin to Pinata ---
 
     // Add the new CID to our batch
-    cidBatch.push(cid.toString());
+    cidBatch.push(cid);
     console.log(`CID batch contains ${cidBatch.length} items.`);
 
     // If batch is full, process it to generate a Merkle Root
     if (cidBatch.length >= BATCH_SIZE) {
       console.log(`BATCH FULL: Processing ${cidBatch.length} CIDs to generate Merkle Root.`);
       
-      const leaves = cidBatch.map(cid => SHA256(cid));
+      const leaves = cidBatch.map(c => SHA256(c));
       const tree = new MerkleTree(leaves, SHA256);
       const merkleRoot = tree.getRoot().toString('hex');
 
@@ -65,13 +84,13 @@ app.post('/messages', async (req: Request, res: Response) => {
     }
 
     res.status(201).json({ 
-      status: 'Message object processed by gateway', 
+      status: 'Message object processed by gateway and pinned to Pinata', 
       timestamp: new Date().toISOString(),
-      message_cid: cid.toString()
+      message_cid: cid
     });
   } catch (error) {
-    console.error('Error adding to IPFS:', error);
-    res.status(500).json({ error: 'Failed to process message object with IPFS.' });
+    console.error('Error processing message with Pinata:', error);
+    res.status(500).json({ error: 'Failed to process message object with Pinata.' });
   }
 });
 
@@ -82,7 +101,11 @@ async function anchorMerkleRoot(merkleRoot: string) {
   const network = bitcoin.networks.testnet;
 
   // WARNING: Insecure. For development purposes only.
-  const privateKeyWIF = 'cTjW8c3ppd1iT2T4d4g1g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g4g-';
+  const privateKeyWIF = process.env.GATEWAY_BITCOIN_WIF;
+  if (!privateKeyWIF) {
+    throw new Error("GATEWAY_BITCOIN_WIF is not set in .env file.");
+  }
+
   const keyPair = ECPair.fromWIF(privateKeyWIF, network);
   const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
 
@@ -100,7 +123,8 @@ async function anchorMerkleRoot(merkleRoot: string) {
       throw new Error(`No UTXOs found for address ${address}. Please fund it on a testnet faucet.`);
     }
 
-    const utxo = utxos[0];
+    // A simple strategy: use the largest UTXO
+    const utxo = utxos.reduce((prev: any, curr: any) => (prev.value > curr.value) ? prev : curr);
     console.log(`Using UTXO: ${utxo.txid}:${utxo.vout} with value ${utxo.value} satoshis`);
 
     // 2. Fetch the full transaction hex for the non-witness UTXO
@@ -123,18 +147,18 @@ async function anchorMerkleRoot(merkleRoot: string) {
     // Add OP_RETURN output
     psbt.addOutput({
       script: embed.output!,
-      value: 0n,
+      value: 0, // OP_RETURN outputs have 0 value
     });
 
     // Add change output
-    const fee = 10000; // A fixed fee in satoshis for simplicity
+    const fee = 1000; // A fixed fee in satoshis for simplicity
     const changeAmount = utxo.value - fee;
-    if (changeAmount < 0) {
-      throw new Error('UTXO value is not enough to cover the transaction fee.');
+    if (changeAmount < 546) { // Dust limit
+      throw new Error('UTXO value is not enough to cover the transaction fee and avoid dust.');
     }
     psbt.addOutput({
       address: address,
-      value: BigInt(changeAmount),
+      value: changeAmount,
     });
 
     // 5. Sign the transaction
