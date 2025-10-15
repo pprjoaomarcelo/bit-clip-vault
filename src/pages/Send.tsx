@@ -60,7 +60,6 @@ export default function Send() {
   const [estimatedFee, setEstimatedFee] = useState<number>(0);
   const [showPreview, setShowPreview] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [storagePointer, setStoragePointer] = useState<string>("");
 
   const ON_CHAIN_BYTE_LIMIT = 75; // Limite seguro para OP_RETURN com prefixo
 
@@ -110,139 +109,63 @@ export default function Send() {
     }
   };
 
-  const handlePrepareTransaction = async () => {
-    if (!recipient.trim() || !message.trim() || !selectedNetwork) {
-      toast({ title: "❌ Erro de validação", description: "Preencha todos os campos: destino, mensagem e rede.", variant: "destructive" });
+  // 1. Valida o formulário e abre o pop-up de confirmação
+  const handlePreview = () => {
+    if (!recipient.trim() || !message.trim()) {
+      toast({ title: "❌ Erro de validação", description: "Preencha o destinatário e a mensagem.", variant: "destructive" });
+      return;
+    }
+    setShowPreview(true);
+  };
+
+  // 2. Envia a mensagem para o gateway APÓS a confirmação no pop-up
+  const handleSendMessage = async () => {
+    const senderAddress = solanaWallet.connected ? solanaWallet.publicKey?.toBase58() : address;
+    if (!senderAddress) {
+      toast({ title: "❌ Erro de Conexão", description: "Conecte uma carteira para definir o remetente.", variant: "destructive" });
       return;
     }
 
     setIsProcessing(true);
+    console.log("[Send] Enviando para o gateway após confirmação...");
 
     try {
-      let payload = ""; // O que será ancorado na blockchain (CID ou mensagem crua)
-      
-      // Lógica ramificada baseada no modo de envio
-      switch (sendMode) {
-        case 'on_chain':
-          if (new TextEncoder().encode(message).length > ON_CHAIN_BYTE_LIMIT) {
-            throw new Error(`A mensagem excede o limite de ${ON_CHAIN_BYTE_LIMIT} bytes para envio on-chain.`);
-          }
-          console.log("[Send] Modo: On-Chain. Payload é a mensagem crua.");
-          payload = message;
-          // Aqui chamaríamos a função de transação Bitcoin com o payload
-          break;
-
-        case 'ipfs_only':
-          console.log("[Send] Modo: IPFS Público. Fazendo upload para o IPFS...");
-          // No mundo real, a chave pública do destinatário seria obtida de alguma forma
-          payload = await uploadToIpfs(message, isEncrypted ? "mock_recipient_pub_key" : "");
-          // Aqui chamaríamos a função de transação Bitcoin com o CID (payload)
-          break;
-
-        case 'complete':
-          console.log("[Send] Modo: Completo. Iniciando fluxo de pagamento e armazenamento...");
-          
-          // 1. Criar fatura Lightning
-          const invoice = await createLightningInvoice(500, "Taxa de Processamento SovereignComm");
-          console.log("[Send] Fatura Lightning criada:", invoice.paymentRequest);
-          // Em um app real, mostraríamos um QR code para o usuário pagar
-          toast({ title: "Pagamento Necessário", description: `Pague a fatura Lightning para continuar: ${invoice.paymentRequest}` });
-
-          // 2. Simular espera pelo pagamento
-          // await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5s
-          // const paymentStatus = await getInvoiceStatus(invoice.paymentHash);
-          // if (paymentStatus.status !== 'paid') {
-          //   throw new Error("Pagamento da fatura Lightning não foi confirmado a tempo.");
-          // }
-          console.log("[Send] Pagamento confirmado (simulação).");
-
-          // 3. Fazer upload para IPFS
-          payload = await uploadToIpfs(message, isEncrypted ? "mock_recipient_pub_key" : "");
-
-          // 4. (Opcional) Criar contrato no Filecoin para anexos
-          // if (message.includes("anexo:")) { // Lógica de detecção de anexo
-          //   await createStorageDeal(payload, message.length);
-          // }
-          break;
-      }
-
-      setStoragePointer(payload);
-      setShowPreview(true);
-
-    } catch (error) {
-      console.error('[Send] Falha na preparação da transação:', error);
-      toast({
-        title: "❌ Erro na Preparação",
-        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleConfirmSend = async () => {
-    setIsProcessing(true);
-    try {
-      let txSignature = "";
-      const isEVM = selectedNetwork === 'ethereum' || L2_NETWORKS.some(n => n.id === selectedNetwork);
-
-      // Determina o endereço de remetente correto com base em qual carteira está conectada
-      const senderAddress = solanaWallet.connected ? solanaWallet.publicKey?.toBase58() : address;
-      if (!senderAddress) {
-        throw new Error("Nenhuma carteira conectada para determinar o remetente.");
-      }
-
-      if (isEVM) {
-        console.log(`[Send] Enviando CID para a rede EVM: ${selectedNetwork}`);
-        txSignature = await sendEvmTransaction(storagePointer, recipient);
-      } else if (selectedNetwork === 'solana') {
-        // A carteira Solana é obtida do hook useWallet()
-        if (!solanaWallet.connected || !solanaWallet.publicKey) {
-          throw new Error("Por favor, conecte sua carteira Solana primeiro.");
-        }
-        console.log(`[Send] Enviando CID para a rede Solana...`);
-        // Passamos o objeto de carteira completo, que corresponde à interface que definimos
-        txSignature = await sendSolanaTransaction(storagePointer, solanaWallet as any);
-      } else if (selectedNetwork === 'bitcoin') {
-        // Lógica de envio para Bitcoin (OP_RETURN) a ser implementada
-        console.log("[Send] Simulação de envio para Bitcoin...");
-        txSignature = `btc_sim_${Math.random().toString(36).substring(2)}`;
-      } else {
-        throw new Error("Rede selecionada não é suportada para envio.");
-      }
-
-      // Salva um registro da mensagem enviada no nosso banco de dados
-      const { error: insertError } = await supabase.from('messages').insert({
+      const messagePayload = {
         sender: senderAddress,
         recipient: recipient,
-        content: message,
-        cid: storagePointer,
-        tx_hash: txSignature,
-        network: selectedNetwork,
+        timestamp: new Date().toISOString(),
+        message: message,
+        encrypted: isEncrypted,
+      };
+
+      const response = await fetch('http://localhost:3000/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messagePayload),
       });
 
-      if (insertError) {
-        console.error("[Supabase] Erro ao salvar a mensagem enviada:", insertError);
-        toast({ title: "⚠️ Aviso", description: "A transação foi enviada, mas falhou ao salvar no seu histórico." });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `O gateway respondeu com status ${response.status}`);
       }
 
+      console.log("[Send] Resposta do gateway:", result);
       toast({
-        title: "🚀 Transação Enviada com Sucesso!",
-        description: `Hash da Transação: ${txSignature}`,
+        title: "🚀 Mensagem Processada pelo Gateway!",
+        description: `CID do IPFS: ${result.message_cid}`,
       });
 
-      // Resetar o formulário
+      // Limpa e fecha o pop-up
       setShowPreview(false);
       setMessage("");
       setRecipient("");
-      setStoragePointer("");
 
     } catch (error) {
-      console.error('[Send] Falha ao confirmar o envio:', error);
+      console.error('[Send] Falha ao enviar mensagem para o gateway:', error);
       toast({
         title: "❌ Erro no Envio",
-        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido.",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao contatar o gateway.",
         variant: "destructive"
       });
     } finally {
@@ -352,8 +275,8 @@ export default function Send() {
               </p>
             </div>
 
-            <Button className="w-full" size="lg" onClick={handlePrepareTransaction} disabled={!connected || isProcessing}>
-              {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Preparando...</> : <><SendIcon className="mr-2 h-4 w-4" /> Revisar e Enviar</>}
+            <Button className="w-full" size="lg" onClick={handlePreview} disabled={!connected || isProcessing}>
+              {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...</> : <><SendIcon className="mr-2 h-4 w-4" /> Revisar Envio</>}
             </Button>
           </CardContent>
         </Card>
@@ -363,7 +286,9 @@ export default function Send() {
         <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Envio</AlertDialogTitle>
-            <AlertDialogDescription>Revise os detalhes da sua transação antes de confirmar.</AlertDialogDescription>
+            <AlertDialogDescription>
+              Você está prestes a enviar esta mensagem através do gateway. Esta ação terá um custo em taxas de rede.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1">
@@ -371,26 +296,23 @@ export default function Send() {
               <div className="text-sm text-muted-foreground font-mono break-all">{recipient}</div>
             </div>
             <div className="space-y-1">
-              <div className="text-sm font-medium">Modo:</div>
-              <div className="text-sm text-muted-foreground">{sendMode}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-sm font-medium">Payload On-Chain:</div>
-              <div className="text-xs text-muted-foreground font-mono break-all bg-muted/30 p-2 rounded">
-                {storagePointer}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-sm font-medium">Mensagem Original:</div>
+              <div className="text-sm font-medium">Mensagem:</div>
               <div className="text-sm text-muted-foreground max-h-32 overflow-y-auto p-2 bg-muted/50 rounded">
-                {isEncrypted && sendMode !== 'on_chain' ? "🔒 Criptografada" : message}
+                {isEncrypted ? "🔒 Criptografada" : message}
               </div>
             </div>
+             <Alert variant="destructive">
+                <DollarSign className="h-4 w-4" />
+                <AlertTitle>Custo da Transação</AlertTitle>
+                <AlertDescription>
+                  Uma taxa de rede (em satoshis) será cobrada para ancorar sua mensagem. O valor exato será determinado no momento da transação.
+                </AlertDescription>
+              </Alert>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isProcessing}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmSend} disabled={isProcessing}>
-              {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...</> : "Confirmar Envio"}
+            <AlertDialogCancel disabled={isProcessing} onClick={() => setShowPreview(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSendMessage} disabled={isProcessing}>
+              {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...</> : "Confirmar e Pagar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
