@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
-import { Settings as SettingsIcon, Bell, Lock, Eye } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Lock, Eye, Gem } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { NetworkBadge } from "@/components/NetworkBadge";
 import type { detectNetwork } from "@/lib/mockData";
@@ -64,7 +64,7 @@ export default function Settings() {
             Settings
           </h1>
           <p className="text-muted-foreground">
-            Manage your preferences and privacy
+            Manage your account, preferences, and privacy
           </p>
         </div>
 

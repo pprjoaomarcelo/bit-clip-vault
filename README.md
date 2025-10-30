@@ -1,73 +1,98 @@
-# Welcome to your Lovable project
+# SovereignComm
 
-## Project info
+SovereignComm is a visionary project to build a truly sovereign and resilient communication system. It combines the physical reach of LoRa mesh networks with the permanence and security of decentralized technologies like IPFS, Filecoin, and the Bitcoin blockchain.
 
-**URL**: https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b
+## Core Architecture
 
-## How can I edit this code?
+The system is designed to anchor data from a potentially offline LoRa mesh network into a global, immutable database (the Bitcoin blockchain). The high-level workflow is as follows:
 
-There are several ways of editing your application.
+1.  A user sends a message over the LoRa mesh network.
+2.  A gateway node, which has both LoRa and internet connectivity, picks up the message.
+3.  The gateway uploads the message content to the InterPlanetary File System (IPFS), receiving a Content Identifier (CID).
+4.  The gateway then commits this CID to the Bitcoin blockchain using an `OP_RETURN` transaction. This acts as an immutable pointer to the message data without bloating the blockchain itself.
+5.  For long-term persistence, the data associated with the CID is pinned on Filecoin.
 
-**Use Lovable**
+## Key Challenges
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b) and start prompting.
+- **Mesh Scalability:** LoRa networks have low bandwidth and are subject to duty-cycle regulations.
+- **Gateway Incentives:** Gateway operators need incentives to provide the crucial bridge between the LoRa network and the internet.
+- **Key Management:** User identity is tied to their cryptographic keys, making key security and backup paramount.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Proposed Solutions & Economic Model
 
-**Use your preferred IDE**
+- **On-chain Cost Optimization:** Instead of one Bitcoin transaction per message, gateways will batch multiple message CIDs into a Merkle Tree and record a single Merkle Root on-chain, reducing costs drastically.
+- **Incentive Model:** Micropayments via the Lightning Network will be used to compensate gateway operators for their service, creating a sustainable and market-driven network.
+- **Phased Rollout:** The project may start by using a lower-cost blockchain (like a Bitcoin sidechain or a Layer 2) to validate the model before moving to the Bitcoin mainnet for maximum security.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Target Applications
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **Primary:** Providing communication for populations without internet access.
+- **Secondary:**
+    - Disaster relief communications.
+    - Censorship-resistant communication for journalists and activists.
+    - Secure and low-cost Machine-to-Machine (M2M) and IoT communication.
 
-Follow these steps:
+## Core Data Architecture: IPLD
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+To solve the challenge of retrieving individual messages while only storing a single root identifier on-chain, SovereignComm will use a structured data approach with IPFS's Inter-Planetary Linked Data (IPLD).
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+This architecture was chosen for its flexibility, privacy, and scalability over deterministic or Merkle-proof-based retrieval systems.
 
-# Step 3: Install the necessary dependencies.
-npm i
+The structure is as follows:
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+1.  **On-Chain Anchor (Bitcoin):** A single `root_cid` is stored on the blockchain for each **identity address**, pointing to that identity's master "Mailbox" object. This is the single point of truth for that specific address (which can be a primary or a derived sub-account).
 
-**Edit a file directly in GitHub**
+2.  **IPFS Level 1 (Mailbox Object):** The `root_cid` resolves to an IPLD object (a key-value map) that contains links to the user's inbox and sent items.
+    ```json
+    {
+      "inbox":  { "/": "QmInboxCid..." },
+      "sent":   { "/": "QmSentCid..." }
+    }
+    ```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3.  **IPFS Level 2 (Message Index Objects):** The `inbox` and `sent` CIDs point to other IPLD map objects. These objects act as indexes, mapping unique, non-sequential message IDs (e.g., UUIDs) to the CIDs of the actual message content. Using non-sequential IDs prevents metadata leakage about the number of messages a user has.
+    ```json
+    {
+      "msg-uuid-001": { "/": "QmMsg1Cid..." },
+      "msg-uuid-002": { "/": "QmMsg2Cid..." }
+    }
+    ```
 
-**Use GitHub Codespaces**
+4.  **IPFS Level 3 (Message Content):** The final CIDs point to the raw, encrypted message data.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+This layered approach allows clients to efficiently traverse the data graph to find specific messages without downloading the entire dataset, while the blockchain provides the ultimate immutable reference to the user's data root.
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## Maintenance
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Clearing Disk Space in Google Cloud Shell
 
-## How can I deploy this project?
+The Google Cloud Shell environment has a limited home disk size (around 5 GB). During development, `npm` caches and `node_modules` directories can consume this space rapidly, leading to a "disk usage at 99%" error which can block all file operations.
 
-Simply open [Lovable](https://lovable.dev/projects/d513eb62-ec8f-4503-8c7c-5295781d196b) and click on Share -> Publish.
+If this occurs, follow these steps to clean up the environment:
 
-## Can I connect a custom domain to my Lovable project?
+1.  **Analyze Disk Usage:** First, identify the largest directories.
+    ```bash
+    du -sh /home/mrx_hck3r/* .[^.]* | sort -rh | head -n 10
+    ```
 
-Yes, you can!
+2.  **Clear the NPM Cache:** The `.npm` cache is often the biggest culprit and is safe to clear.
+    ```bash
+    npm cache clean --force
+    ```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+3.  **Remove all `node_modules` Directories:** These can be regenerated.
+    ```bash
+    # Remove from project
+    rm -rf /home/mrx_hck3r/sovereign-comm/node_modules
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+    # Remove from any other locations found in step 1
+    rm -rf /home/mrx_hck3r/node_modules
+    ```
+
+4.  **Reinstall Project Dependencies:** After cleaning, navigate to the project directory and reinstall the necessary packages.
+    ```bash
+    cd /home/mrx_hck3r/sovereign-comm
+    npm install
+    ```

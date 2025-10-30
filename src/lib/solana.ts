@@ -1,84 +1,72 @@
-// Solana-specific functionality for message sending
-export type SolanaMessageType = 'memo' | 'dedicated-account';
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  TransactionInstruction,
+  clusterApiUrl,
+} from '@solana/web3.js';
 
-export interface SolanaMessageOptions {
-  type: SolanaMessageType;
-  compress: boolean;
+// A interface para uma carteira Solana conectada (padrão do Wallet-Adapter)
+// A UI precisará fornecer um objeto que corresponda a esta interface.
+export interface SolanaWallet {
+  publicKey: PublicKey;
+  sendTransaction: (transaction: Transaction, connection: Connection) => Promise<string>;
 }
 
-/**
- * Send message via Solana Memo program
- * Most cost-effective for short messages
- */
-export async function sendViaMemo(
-  message: string,
-  recipientAddress: string,
-  senderWallet: any
-): Promise<string> {
-  console.log(`[Solana] Sending via Memo...`, { 
-    messageLength: message.length,
-    recipient: recipientAddress 
-  });
+// O ID do programa Memo da Solana, que aceita dados arbitrários
+const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcVtrp5GhoG22uBwNo9');
 
-  try {
-    // In production:
-    // 1. Connect to Solana web3.js
-    // 2. Create transaction with Memo instruction
-    // 3. Sign and send transaction
-    
-    const mockTxSignature = Math.random().toString(36).substring(2, 15) + 
-                           Math.random().toString(36).substring(2, 15);
-    
-    console.log(`[Solana] Memo transaction successful`, { signature: mockTxSignature });
-    
-    return mockTxSignature;
-  } catch (error) {
-    console.error(`[Solana] Memo transaction failed:`, error);
-    throw new Error(`Falha ao enviar via Memo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+/**
+ * Envia uma transação na rede Solana contendo um ponteiro de armazenamento (CID)
+ * usando o programa Memo.
+ * @param storagePointer - O CID do IPFS a ser ancorado na blockchain.
+ * @param wallet - O objeto da carteira do remetente que pode assinar e enviar a transação.
+ * @returns {Promise<string>} A assinatura da transação.
+ */
+export const sendSolanaTransaction = async (
+  storagePointer: string,
+  wallet: SolanaWallet
+): Promise<string> => {
+  if (!wallet || !wallet.publicKey) {
+    throw new Error('Carteira Solana não conectada ou inválida.');
   }
-}
 
-/**
- * Send message via dedicated account
- * Better for longer messages, stores data in account
- */
-export async function sendViaDedicatedAccount(
-  message: string,
-  recipientAddress: string,
-  senderWallet: any
-): Promise<string> {
-  console.log(`[Solana] Sending via Dedicated Account...`, { 
-    messageLength: message.length,
-    recipient: recipientAddress 
-  });
+  console.log(`[Solana] Iniciando envio de CID via Memo: ${storagePointer}`);
 
   try {
-    // In production:
-    // 1. Create a new account to store message data
-    // 2. Write message data to account
-    // 3. Transfer ownership to recipient or keep as readable
-    
-    const mockTxSignature = Math.random().toString(36).substring(2, 15) + 
-                           Math.random().toString(36).substring(2, 15);
-    const mockAccountAddress = Math.random().toString(36).substring(2, 15);
-    
-    console.log(`[Solana] Dedicated account transaction successful`, { 
-      signature: mockTxSignature,
-      accountAddress: mockAccountAddress 
+    // 1. Conectar à rede de desenvolvimento (devnet) da Solana
+    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+
+    // 2. Criar a instrução para o programa Memo com nosso CID como dados
+    const memoInstruction = new TransactionInstruction({
+      keys: [{ pubkey: wallet.publicKey, isSigner: true, isWritable: true }],
+      programId: MEMO_PROGRAM_ID,
+      data: Buffer.from(storagePointer, 'utf-8'),
     });
-    
-    return mockTxSignature;
-  } catch (error) {
-    console.error(`[Solana] Dedicated account transaction failed:`, error);
-    throw new Error(`Falha ao enviar via conta dedicada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-  }
-}
 
-/**
- * Choose optimal Solana method based on message size
- */
-export function chooseSolanaMethod(messageLength: number): SolanaMessageType {
-  // Memo is optimal for messages under ~566 bytes
-  // Dedicated account is better for longer messages
-  return messageLength <= 566 ? 'memo' : 'dedicated-account';
-}
+    // 3. Criar a transação e adicionar a instrução
+    const transaction = new Transaction().add(memoInstruction);
+
+    // 4. Obter o blockhash recente, necessário para a transação
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = wallet.publicKey;
+
+    // 5. Usar o método `sendTransaction` da carteira para pedir ao usuário para assinar e enviar
+    const signature = await wallet.sendTransaction(transaction, connection);
+    console.log(`[Solana] Transação enviada com sucesso. Assinatura: ${signature}`);
+
+    // 6. (Opcional) Confirmar que a transação foi finalizada pela rede
+    await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight });
+    console.log(`[Solana] Transação confirmada.`);
+
+    return signature;
+
+  } catch (error: any) {
+    console.error('[Solana] Falha na transação via Memo:', error);
+    if (error.name === 'WalletSendTransactionError') {
+      throw new Error('Transação rejeitada pelo usuário na carteira.');
+    }
+    throw new Error(`Falha ao enviar transação na Solana: ${error.message}`);
+  }
+};

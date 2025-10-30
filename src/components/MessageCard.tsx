@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { NetworkBadge } from "./NetworkBadge";
-import { ExternalLink, Lock, Unlock, Send, Inbox, AlertCircle, CheckCircle2, Eye } from "lucide-react";
+import { ExternalLink, Lock, Unlock, Eye, Loader2 } from "lucide-react";
 
+// Representa a estrutura de uma mensagem como definida no Inbox.tsx
 interface Message {
   id: string;
   user_address: string;
@@ -14,19 +14,21 @@ interface Message {
   network: string;
   network_type: string;
   tx_hash: string | null;
-  status: string;
-  created_at: string;
+  raw_content?: string | null;
 }
+
+type DecryptionStatus = 'idle' | 'fetching' | 'decrypting' | 'decrypted' | 'error';
 
 interface MessageCardProps {
   message: Message;
   userAddress: string;
-  onDecrypt?: (messageId: string) => Promise<string | null>;
+  isSent: boolean;
+  onDecrypt: (messageId: string) => Promise<string | null>;
 }
 
-export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProps) => {
+export const MessageCard = ({ message, userAddress, isSent, onDecrypt }: MessageCardProps) => {
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
-  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [status, setStatus] = useState<DecryptionStatus>('idle');
 
   const formatAddress = (addr: string) => `${addr.slice(0, 8)}...${addr.slice(-6)}`;
   
@@ -39,20 +41,20 @@ export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProp
     }).format(new Date(dateString));
   };
 
-  const isSent = message.user_address.toLowerCase() === userAddress.toLowerCase();
-  const otherAddress = isSent ? message.recipient_address : message.user_address;
+  const otherAddress = isSent ? message.recipient_address : message.sender_address;
 
   const handleDecrypt = async () => {
     if (!onDecrypt) return;
     
-    setIsDecrypting(true);
+    setStatus('fetching'); // Pode começar como 'buscando' ou 'pedindo assinatura'
     try {
       const decrypted = await onDecrypt(message.id);
       if (decrypted) {
         setDecryptedContent(decrypted);
+        setStatus('decrypted');
       }
     } finally {
-      setIsDecrypting(false);
+      if (status !== 'decrypted') setStatus('idle'); // Reseta se não foi bem sucedido
     }
   };
 
@@ -77,39 +79,28 @@ export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProp
     return explorerUrls[message.network] || '#';
   };
 
+  const getButtonState = () => {
+    switch (status) {
+      case 'fetching':
+        return { text: 'Buscando no IPFS...', icon: <Loader2 className="w-3 h-3 animate-spin" />, disabled: true };
+      case 'decrypting':
+        return { text: 'Descriptografando...', icon: <Loader2 className="w-3 h-3 animate-spin" />, disabled: true };
+      case 'decrypted':
+        return { text: 'Mensagem Visível', icon: <Unlock className="w-3 h-3" />, disabled: true };
+      case 'error':
+        return { text: 'Tentar Novamente', icon: <Eye className="w-3 h-3" />, disabled: false };
+      default:
+        return { text: 'Ver Mensagem', icon: <Eye className="w-3 h-3" />, disabled: false };
+    }
+  };
+
+  const buttonState = getButtonState();
+
   return (
     <Card className="p-4 hover:bg-secondary/50 transition-all border-border bg-card/50 backdrop-blur-sm">
       <div className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              {isSent ? (
-                <Badge variant="outline" className="gap-1">
-                  <Send className="w-3 h-3" />
-                  Sent
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="gap-1">
-                  <Inbox className="w-3 h-3" />
-                  Received
-                </Badge>
-              )}
-              
-              {message.status === 'success' && (
-                <Badge variant="default" className="gap-1 bg-green-500/20 text-green-500 border-green-500/30">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Confirmed
-                </Badge>
-              )}
-              
-              {message.status === 'failed' && (
-                <Badge variant="destructive" className="gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Failed
-                </Badge>
-              )}
-            </div>
-
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-muted-foreground font-mono">
                 {isSent ? 'To:' : 'From:'}
@@ -121,17 +112,11 @@ export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProp
             
             <div className="flex items-center gap-2 flex-wrap">
               <NetworkBadge network={message.network as any} />
-              <span className="text-xs text-muted-foreground">{formatDate(message.created_at)}</span>
+              <span className="text-xs text-muted-foreground">{formatDate(message.timestamp)}</span>
               {message.encrypted && (
                 <div className="flex items-center gap-1 text-xs text-green-500">
                   <Lock className="w-3 h-3" />
                   <span>Encrypted</span>
-                </div>
-              )}
-              {!message.encrypted && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Unlock className="w-3 h-3" />
-                  <span>Public</span>
                 </div>
               )}
             </div>
@@ -142,16 +127,16 @@ export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProp
           <p className="text-sm text-foreground leading-relaxed break-words">
             {displayContent}
           </p>
-          {message.encrypted && !decryptedContent && onDecrypt && (
+          {message.encrypted && status !== 'decrypted' && onDecrypt && (
             <Button
               variant="outline"
               size="sm"
               className="mt-2 gap-2"
               onClick={handleDecrypt}
-              disabled={isDecrypting}
+              disabled={buttonState.disabled}
             >
-              <Eye className="w-3 h-3" />
-              {isDecrypting ? 'Descriptografando...' : 'Ver mensagem'}
+              {buttonState.icon}
+              {buttonState.text}
             </Button>
           )}
         </div>
@@ -170,12 +155,6 @@ export const MessageCard = ({ message, userAddress, onDecrypt }: MessageCardProp
               <ExternalLink className="w-3 h-3" />
               Explorer
             </Button>
-          </div>
-        )}
-
-        {!message.tx_hash && message.status === 'failed' && (
-          <div className="text-xs text-destructive">
-            Transaction failed - no hash available
           </div>
         )}
       </div>

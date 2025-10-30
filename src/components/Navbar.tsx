@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Inbox, Send, Settings, Wallet } from "lucide-react";
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 interface NavbarProps {
   connected?: boolean;
@@ -87,9 +88,10 @@ export const Navbar = ({ connected, address, onConnect, onDisconnect }: NavbarPr
                 onClick={onConnect}
               >
                 <Wallet className="w-4 h-4" />
-                Connect Wallet
+                Connect EVM
               </Button>
             )}
+            <WalletMultiButton />
           </div>
         </div>
       </div>

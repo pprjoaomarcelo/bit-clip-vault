@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
-import { MessageCard } from "@/components/MessageCard";
+import { MessageCard, DecryptionStatus } from "@/components/MessageCard";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Inbox as InboxIcon, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -15,23 +13,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { requestWalletSignature, decryptMessage } from "@/lib/encryption";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-interface DBMessage {
-  id: string;
-  user_address: string;
+/**
+ * Represents a message retrieved from a decentralized source.
+ * The structure is generic and not tied to a specific database schema.
+ */
+interface Message {
+  id: string; // A unique identifier, e.g., transaction hash or content CID
+  sender_address: string;
   recipient_address: string;
-  content: string;
+  content_cid: string; // The CID of the (potentially encrypted) content on IPFS
   encrypted: boolean;
   network: string;
-  network_type: string;
-  tx_hash: string | null;
-  storage_provider: string;
-  storage_cid: string;
-  storage_url: string;
-  gas_fee: number | null;
-  status: string;
-  direction: string;
-  created_at: string;
+  timestamp: string; // ISO 8601 date string
+  tx_hash: string | null; // The on-chain transaction hash
+  raw_content?: string | null; // To hold fetched content from IPFS
 }
 
 export default function Inbox() {
@@ -39,7 +37,7 @@ export default function Inbox() {
   const { toast } = useToast();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState("");
-  const [messages, setMessages] = useState<DBMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedNetwork, setSelectedNetwork] = useState<string>("all");
@@ -64,23 +62,35 @@ export default function Inbox() {
 
   const fetchMessages = async () => {
     setLoading(true);
+    console.log("[Inbox] Fetching messages for address:", address);
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(`user_address.eq.${address},recipient_address.eq.${address}`)
+        .or(`recipient_address.eq.${address},sender_address.eq.${address}`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setMessages(data || []);
-      
-      // Check if there are encrypted messages and we need signature
-      const hasEncryptedMessages = data?.some(msg => msg.encrypted) || false;
+      // Map the database result to the frontend's Message interface
+      const formattedMessages: Message[] = data.map((dbMsg: any) => ({
+        id: dbMsg.id,
+        sender_address: dbMsg.sender_address,
+        recipient_address: dbMsg.recipient_address,
+        content_cid: dbMsg.content_cid,
+        encrypted: dbMsg.encrypted,
+        network: dbMsg.network,
+        timestamp: dbMsg.created_at,
+        tx_hash: dbMsg.tx_hash,
+      }));
+
+      setMessages(formattedMessages);
+
+      const hasEncryptedMessages = formattedMessages.some(msg => msg.encrypted);
       if (hasEncryptedMessages && !walletSignature) {
-        // We'll request signature when user tries to view encrypted message
-        console.log("[Inbox] Encrypted messages found, signature will be requested when viewing");
+        console.log("[Inbox] Encrypted messages found, signature will be requested on demand.");
       }
+
     } catch (error: any) {
       console.error("[Inbox] Error fetching messages:", error);
       toast({
@@ -93,28 +103,42 @@ export default function Inbox() {
     }
   };
 
-  const handleDecryptMessage = async (messageId: string): Promise<string | null> => {
-    try {
-      // Request signature if we don't have it yet
-      if (!walletSignature) {
+  const handleDecryptMessage = async (messageCid: string, setStatusCallback: (status: DecryptionStatus) => void): Promise<string | null> => {
+    const message = messages.find(m => m.id === messageCid);
+    if (!message) {
+      toast({ title: "Erro", description: "Mensagem não encontrada.", variant: "destructive" });
+      return null;
+    }
+
+    // 1. Obter a assinatura da carteira, se ainda não tivermos
+    let signature = walletSignature;
+    if (!signature) {
+      try {
+        setStatusCallback('requesting_signature');
         console.log("[Inbox] Requesting wallet signature for decryption...");
-        const signature = await requestWalletSignature(address);
+        signature = await requestWalletSignature(address);
         setWalletSignature(signature);
-        
-        // Find message and decrypt
-        const message = messages.find(m => m.id === messageId);
-        if (!message) return null;
-        
-        const decrypted = await decryptMessage(message.content, signature);
-        return decrypted;
-      } else {
-        // Use existing signature
-        const message = messages.find(m => m.id === messageId);
-        if (!message) return null;
-        
-        const decrypted = await decryptMessage(message.content, walletSignature);
-        return decrypted;
+      } catch (error: any) {
+        console.error("[Inbox] Signature request failed:", error);
+        toast({ title: "Assinatura Negada", description: "Você precisa assinar para descriptografar mensagens.", variant: "destructive" });
+        return null;
       }
+    }
+
+    try {
+      // 2. Buscar o conteúdo criptografado do IPFS
+      setStatusCallback('fetching');
+      // TODO: Implementar a busca real do IPFS. Por enquanto, vamos simular.
+      // const encryptedContent = await fetchFromIpfs(message.content_cid);
+      const encryptedContent = message.raw_content; // Usando o campo raw_content se ele existir (para mocks)
+      if (!encryptedContent) {
+        throw new Error("Conteúdo criptografado não encontrado no IPFS (simulação).");
+      }
+      setStatusCallback('decrypting');
+
+      // 3. Descriptografar
+      const decrypted = await decryptMessage(encryptedContent, signature);
+      return decrypted;
     } catch (error: any) {
       console.error("[Inbox] Decryption failed:", error);
       toast({
@@ -122,6 +146,7 @@ export default function Inbox() {
         description: error.message || "Não foi possível descriptografar a mensagem",
         variant: "destructive",
       });
+      setStatusCallback('error');
       return null;
     }
   };
@@ -162,11 +187,11 @@ export default function Inbox() {
     : messages.filter(msg => msg.network === selectedNetwork);
 
   const sentMessages = filteredMessages.filter(msg => 
-    msg.user_address.toLowerCase() === address.toLowerCase()
+    msg.sender_address.toLowerCase() === address.toLowerCase()
   );
   
   const receivedMessages = filteredMessages.filter(msg => 
-    msg.recipient_address.toLowerCase() === address.toLowerCase()
+    msg.recipient_address.toLowerCase() === address.toLowerCase() && msg.sender_address.toLowerCase() !== address.toLowerCase()
   );
 
   const uniqueNetworks = Array.from(new Set(messages.map(msg => msg.network)));
@@ -268,6 +293,7 @@ export default function Inbox() {
                       key={message.id} 
                       message={message}
                       userAddress={address}
+                      isSent={message.sender_address.toLowerCase() === address.toLowerCase()}
                       onDecrypt={handleDecryptMessage}
                     />
                   ))}
@@ -284,6 +310,7 @@ export default function Inbox() {
                         key={message.id} 
                         message={message}
                         userAddress={address}
+                        isSent={false}
                         onDecrypt={handleDecryptMessage}
                       />
                     ))
@@ -301,6 +328,7 @@ export default function Inbox() {
                         key={message.id} 
                         message={message}
                         userAddress={address}
+                        isSent={true}
                         onDecrypt={handleDecryptMessage}
                       />
                     ))
