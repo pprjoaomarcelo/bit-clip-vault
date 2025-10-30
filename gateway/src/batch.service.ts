@@ -1,8 +1,8 @@
-import { createMerkleTree } from './services/ipfs.service.js';
-import { anchorMerkleRoot } from './services/bitcoin.service.js';
-import logger from './services/logger.service.js';
+import { createMerkleTree } from './ipfs.service.js';
+import { anchorMerkleRoot } from './bitcoin.service.js';
+import logger from './logger.service.js';
 import fs from 'fs/promises';
-import { BATCH_SIZE, BATCH_TIMEOUT_MS, MAX_ANCHOR_RETRIES, INITIAL_RETRY_DELAY_MS } from '../config.js';
+import { BATCH_SIZE, BATCH_TIMEOUT_MS, MAX_ANCHOR_RETRIES, INITIAL_RETRY_DELAY_MS } from './config.js';
 
 class MessageBatch {
   private cids: string[] = [];
