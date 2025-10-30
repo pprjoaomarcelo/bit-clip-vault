@@ -159,13 +159,16 @@ To support user accounts, subscriptions, and usage tracking, the following datab
     );
     ```
 
-*   **`user_profiles` Table**: Extends the default `auth.users` table with application-specific data.
+*   **`user_profiles` Table**: Stores user-specific data like their current plan and usage. To enhance privacy, this table does **not** directly reference the `auth.users` table or store the user's wallet address. Instead, it uses a pseudonymous identifier.
     ```sql
     CREATE TABLE user_profiles (
-      id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+      -- This is a secure hash of the user's wallet address, acting as a pseudonymous ID.
+      -- This prevents linking usage data directly to a wallet address in case of a DB breach.
+      user_pseudonym TEXT PRIMARY KEY,
       plan_id UUID REFERENCES plans(id) ON DELETE SET NULL,
       storage_used_bytes BIGINT DEFAULT 0,
-      updated_at TIMESTAMPTZ DEFAULT now()
+      subscription_active_until TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now()
     );
     ```
 
@@ -185,10 +188,10 @@ The gateway is a Node.js service responsible for processing user messages and in
         *   **Request Body Schema:** The endpoint expects a JSON object conforming to the IPLD Message Schema v1.0.
             ```json
             {
-              "schemaVersion": "1.0",
+              "schemaVersion": "1.1",
               "timestamp": "2025-10-12T10:00:00Z",
               "sender": "SENDER_PUBLIC_KEY_OR_ID",
-              "recipient": "RECIPIENT_PUBLIC_KEY_OR_ID",
+              "recipients": ["RECIPIENT_1_ID", "RECIPIENT_2_ID"],
               "content": "Message body text.",
               "attachments": [
                 {
@@ -207,14 +210,17 @@ The gateway is a Node.js service responsible for processing user messages and in
               "message_cid": "CID_OF_THE_MESSAGE_OBJECT"
             }
             ```
-        *   **Error Response (400):** Returned if required fields (`sender`, `recipient`, `timestamp`) are missing.
+        *   **Error Response (400):** Returned if required fields (`sender`, `recipients`, `timestamp`) are missing.
 
 *   **Core Logic Flow:**
     1.  The service receives a JSON object at the `/messages` endpoint.
-    2.  It validates that the required schema fields are present.
-    3.  The entire JSON object is added to IPFS, generating a unique `message_cid`.
-    4.  This `message_cid` is added to an in-memory array (`cidBatch`).
-    5.  When the batch size reaches a defined limit (e.g., 5), the service generates a Merkle Tree from the CIDs in the batch.
-    6.  It calculates the Merkle Root of the tree and logs it to the console.
-    7.  The batch is cleared to begin collecting the next set of CIDs.
-    8.  **(Next Step):** The calculated Merkle Root will be anchored onto the Bitcoin blockchain.
+    2.  It validates that the required schema fields are present. It checks if `recipients` is an array.
+    3.  The entire JSON object (with the `content` and `attachments`) is added to IPFS, generating a single, unique `message_cid`.
+    4.  The gateway then **loops through each address in the `recipients` array**. For each recipient, it performs the "mailbox update" logic: it fetches their old mailbox, adds the new `message_cid` to their inbox, and generates a `new_mailbox_root_cid` for that specific user.
+    5.  Each of these `new_mailbox_root_cid`s is added to the in-memory batch (`cidBatch`).
+    6.  When the batch size reaches a defined limit (e.g., 5), the service generates a Merkle Tree from the **mailbox CIDs** in the batch.
+    7.  It calculates the Merkle Root of the tree and logs it to the console.
+    8.  The batch is cleared to begin collecting the next set of mailbox CIDs.
+    9.  **(Next Step):** The calculated Merkle Root will be anchored onto the Bitcoin blockchain. In the current implementation, the gateway funds this transaction itself using the wallet configured in its `.env` file. In the full economic model, the user would first pay the gateway for this service via Lightning Network.
+
+This anchoring transaction is a "proof-of-existence" for the updated state of multiple mailboxes and does not directly involve the sender's or recipient's address. The delivery of the message is handled by the client discovering their new mailbox CID and traversing the IPLD graph.

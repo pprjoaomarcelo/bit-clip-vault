@@ -91,30 +91,6 @@ export default function Settings() {
           </Card>
         )}
 
-        <Card className="p-6 mb-6 bg-card/50 backdrop-blur-sm">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Gem className="w-4 h-4 text-primary" />
-            Assinatura & Uso
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Plano Atual</p>
-                <p className="font-semibold">Plano Básico</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => navigate('/upgrade')}>Upgrade</Button>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary">
-              <p className="text-sm text-muted-foreground mb-1">Tamanho Máximo de Anexo</p>
-              <p className="font-mono text-sm">3 MB</p>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary">
-                <p className="text-sm text-muted-foreground mb-1">Rede Principal</p>
-                <p className="font-mono text-sm">Bitcoin</p>
-            </div>
-          </div>
-        </Card>
-
         <Card className="p-6 bg-card/50 backdrop-blur-sm">
           <h3 className="font-semibold mb-6 flex items-center gap-2">
             <Eye className="w-4 h-4" />

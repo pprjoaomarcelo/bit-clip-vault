@@ -1,9 +1,9 @@
 
 // Este arquivo orquestra o processo de preparação e upload de dados para o IPFS.
-
-// Importaremos bibliotecas reais aqui no futuro.
+import axios from 'axios';
 // pako é uma biblioteca de compressão/descompressão Gzip muito popular e eficiente.
 import { gzip } from 'pako';
+import { encrypt } from 'ecies-js';
 
 /**
  * Comprime os dados usando Gzip.
@@ -24,24 +24,21 @@ const compressData = (data: string | Uint8Array): Uint8Array => {
 
 /**
  * Criptografa os dados usando a chave pública do destinatário.
- * (Esta é uma implementação mock. A real usaria ECIES com uma biblioteca como ethers.js ou noble-curves).
+ * Esta é a implementação real usando ECIES.
  * @param data - O buffer de dados (já comprimido) a ser criptografado.
  * @param recipientPublicKey - A chave pública do destinatário em formato hexadecimal.
  * @returns O buffer de dados criptografados.
  */
 const encryptData = async (data: Uint8Array, recipientPublicKey: string): Promise<Uint8Array> => {
   console.log(`[IPFS] Criptografando dados para a chave pública: ${recipientPublicKey.substring(0, 10)}...`);
-  
-  // LÓGICA DE CRIPTOGRAFIA REAL (ex: ECIES) IRIA AQUI.
-  // A implementação dependeria da biblioteca de criptografia escolhida.
-  
-  // Por enquanto, para simular a criptografia, vamos apenas adicionar um prefixo "encrypted_" aos dados.
-  // Isso nos permite verificar que a etapa de criptografia foi chamada.
-  const prefix = new TextEncoder().encode('encrypted_');
-  const encrypted = new Uint8Array(prefix.length + data.length);
-  encrypted.set(prefix);
-  encrypted.set(data, prefix.length);
-  
+
+  // 1. Converte a chave pública hexadecimal para um Buffer.
+  // A biblioteca 'ecies-js' espera um Buffer.
+  const publicKeyBuffer = Buffer.from(recipientPublicKey, 'hex');
+
+  // 2. Criptografa os dados usando a chave pública.
+  const encrypted = await encrypt(publicKeyBuffer, data);
+
   console.log(`[IPFS] Dados criptografados (simulação). Tamanho final: ${encrypted.length} bytes`);
   return encrypted;
 };
@@ -69,14 +66,32 @@ export const uploadToIpfs = async (rawData: string | Uint8Array, recipientPublic
   // A implementação real usaria um cliente IPFS (como 'kubo-rpc-client') para se conectar a um nó IPFS
   // ou faria um POST para um gateway IPFS público com permissão de escrita (ex: Infura, Pinata).
   console.log(`[IPFS] Fazendo upload dos dados criptografados para a rede IPFS (simulação)...`);
-
-  // Mock do upload e do CID retornado.
-  // O CID é um hash do conteúdo final (os dados criptografados e comprimidos).
-  // Para este mock, vamos gerar um hash simples para simular um CID.
-  // A implementação real usaria a biblioteca do IPFS para obter o CID verdadeiro.
-  const mockCid = `Qm${btoa(String.fromCharCode.apply(null, Array.from(encryptedData))).substring(0, 44)}`;
   
-  console.log(`[IPFS] Upload concluído. CID retornado: ${mockCid}`);
-
-  return mockCid;
+  // --- IMPLEMENTAÇÃO REAL COM PINATA (para o frontend) ---
+  // No ambiente Vite (frontend), as variáveis de ambiente precisam do prefixo VITE_
+  const pinataJwt = import.meta.env.VITE_PINATA_JWT;
+  if (!pinataJwt) {
+    console.error('[IPFS] A variável de ambiente VITE_PINATA_JWT não está configurada no arquivo .env do frontend.');    throw new Error('Chave da API do Pinata (PINATA_JWT) não configurada no .env do frontend.');
+  }
+  
+  try {
+    // No navegador, usamos a API FormData nativa.
+    const formData = new FormData();
+    // Criamos um Blob (Binary Large Object) a partir dos nossos dados criptografados.
+    const file = new Blob([encryptedData], { type: 'application/octet-stream' });
+    formData.append('file', file, 'sovereign-comm-payload.gz.enc');
+    
+    const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
+      headers: {
+        'Authorization': `Bearer ${pinataJwt}`
+      }
+    });
+    
+    const cid = response.data.IpfsHash;
+    console.log(`[IPFS] Upload para o Pinata concluído. CID retornado: ${cid}`);
+    return cid;
+    
+  } catch (error: any) {
+    console.error('[IPFS] Falha no upload para o Pinata:', error.response?.data || error.message);    throw new Error('Falha ao fazer upload para o IPFS. Verifique a chave da API e a conexão.');
+  }
 };

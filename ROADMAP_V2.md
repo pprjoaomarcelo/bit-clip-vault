@@ -43,6 +43,10 @@ This document outlines the development phases for building the core infrastructu
 *   **2.3. Implement Reliability Protocol:** Code the failure detection, error reporting, and refund/retry logic within the client.
 *   **2.4. Implement Full Message Flow:** Add the Merkle Proof generation logic to the gateway software and the validation logic to the client software. Implement the full IPLD-based mailbox update and retrieval flow.
     *   **[x] Gateway: Implemented Merkle Root generation and Bitcoin anchoring (Testnet) via OP_RETURN.**
+    *   **Task:** Implement dual-mode sending capabilities in the client and gateway:
+        *   **A) Sovereign Mode (Default):** The standard, private, and efficient flow where the Merkle Root of mailbox updates is anchored.
+        *   **B) Public Manifesto Mode (via IPFS):** An option for the user to send a rich, public, unencrypted message with attachments. The client creates a JSON "manifesto" of the content, uploads it to IPFS, and the gateway anchors the resulting **manifesto CID** in the `OP_RETURN`.
+        *   **C) Public Bulletin Mode (On-Chain):** A legacy/experimental option for sending a very short, public, unencrypted message directly into a Bitcoin `OP_RETURN` transaction, with clear warnings about cost and lack of privacy.
 
 ---
 

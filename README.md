@@ -40,7 +40,7 @@ This architecture was chosen for its flexibility, privacy, and scalability over 
 
 The structure is as follows:
 
-1.  **On-Chain Anchor (Bitcoin):** A single `root_cid` is stored on the blockchain for each user, pointing to their master "Mailbox" object. This is the user's single point of truth.
+1.  **On-Chain Anchor (Bitcoin):** A single `root_cid` is stored on the blockchain for each **identity address**, pointing to that identity's master "Mailbox" object. This is the single point of truth for that specific address (which can be a primary or a derived sub-account).
 
 2.  **IPFS Level 1 (Mailbox Object):** The `root_cid` resolves to an IPLD object (a key-value map) that contains links to the user's inbox and sent items.
     ```json
