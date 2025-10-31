@@ -1,60 +1,35 @@
+/**
+ * @file index.ts
+ * @description The main entry point for the Indexer service.
+ */
+
 import express from 'express';
-import type { Request, Response, NextFunction } from 'express';
-import { PORT } from './config.js';
-import { initializeIpfsClient, addJsonToIpfs } from './services/ipfs.service.js';
-import logger from './services/logger.service.js';
-import { messageBatch } from './services/batch.service.js';
+import type { Request, Response } from 'express';
+import 'dotenv/config';
+
+const app = express();
+const PORT = process.env.INDEXER_PORT || 4000;
+
+app.use(express.json());
 
 /**
- * Initializes services and starts the Express server.
+ * Health check endpoint.
  */
-async function main() {
-  try {
-    initializeIpfsClient();
-    logger.info('IPFS client initialized successfully.');
-  } catch (error) {
-    logger.crit("FATAL: Failed to initialize IPFS client. Exiting.", { error });
-    process.exit(1);
-  }
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'Indexer is running' });
+});
 
-  const app = express();
-  app.use(express.json());
+/**
+ * Endpoint for clients to fetch message pointers for a given address.
+ * @route GET /messages/:userAddress
+ */
+app.get('/messages/:userAddress', (req: Request, res: Response) => {
+  const { userAddress } = req.params;
+  // TODO: Implement database lookup
+  res.status(200).json({ userAddress, messages: [] });
+});
 
-  // Route for receiving new messages
-  app.post('/messages', async (req: Request, res: Response, next: NextFunction) => {
-    logger.info('Received new message object...');
-    const messageObject = req.body;
-
-    // Basic validation
-    if (!messageObject || typeof messageObject !== 'object' || Object.keys(messageObject).length === 0) {
-      return res.status(400).json({ error: 'Invalid or empty message object provided.' });
-    }
-
-    try {
-      const cid = await addJsonToIpfs(messageObject);
-      logger.info(`Message object added to IPFS with CID: ${cid}`);
-      
-      messageBatch.addCid(cid);
-
-      res.status(202).json({ status: 'Message accepted by gateway for batching.', cid });
-    } catch (error) {
-      logger.error('Error processing message:', { error });
-      next(error); // Pass error to the error handling middleware
-    }
-  });
-
-  // Generic error handling middleware
-  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-    logger.error('Unhandled error caught by middleware', { error: err.stack });
-    res.status(500).json({ error: 'An internal server error occurred.' });
-  });
-
-  app.listen(PORT, () => {
-    logger.info(`Gateway server listening on port ${PORT}`);
-  });
-}
-
-main().catch(error => {
-  console.error("An unhandled error occurred during startup:", error);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`Indexer server listening on port ${PORT}`);
+  // TODO: Start the Bitcoin listener
 });
